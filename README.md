@@ -4,8 +4,8 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" /></a>
-  <a href="https://github.com/alookai/alook/actions"><img src="https://github.com/alookai/alook/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://codecov.io/gh/alookai/alook"><img src="https://codecov.io/gh/alookai/alook/branch/main/graph/badge.svg" alt="codecov" /></a>
+  <a href="https://github.com/9ether530-byte/alook/actions"><img src="https://github.com/9ether530-byte/alook/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://codecov.io/gh/9ether530-byte/alook"><img src="https://codecov.io/gh/9ether530-byte/alook/branch/main/graph/badge.svg" alt="codecov" /></a>
   <a href="https://www.npmjs.com/package/@alook/app"><img src="https://img.shields.io/npm/v/@alook/app.svg" alt="npm version" /></a>
   <a href="https://alook.ai/c/invite/nC7ax53lwm"><img src="./assets/readme/alook-join.svg" alt="Alook Join" /></a>
   <a href="https://discord.alook.ai"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
@@ -15,7 +15,22 @@
   <a href="https://alook.ai">Website</a> · <a href="https://discord.alook.ai">Discord</a>
 </p>
 
+## NativeLayer fork
 
+This is a fork of [Alook](https://github.com/alookai/alook) (Apache-2.0),
+maintained by NativeLayer / Rashad Durrand Smith under
+[9ether530-byte/alook](https://github.com/9ether530-byte/alook).
+The Alook name, upstream attribution, and Apache-2.0 license are kept
+intentionally — this is not a rebrand.
+
+- Fork point: `d668f738` ("feat(daemon): replace nap with memory review
+  commits (#1302)", 2026-11-14). Upstream and fork were in sync there.
+- Changes so far, and only these: `TASKS.md` (fork backlog, commit
+  `212dc50`) and this fork note. No upstream code has been changed yet.
+- Backlog: see [TASKS.md](TASKS.md). Approval-gate findings:
+  see [APPROVAL-GATE-AUDIT.md](APPROVAL-GATE-AUDIT.md).
+- Upstream links above (npm `@alook/app`, alook.ai, Discord) still point
+  at the upstream project; the CI and Codecov badges now point at this fork.
 
 ## What is Alook?
 
