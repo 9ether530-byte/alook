@@ -41,6 +41,7 @@ export * as communityMachine from "./queries/community/machine";
 export * as communityMachineSession from "./queries/community/machine-session-epoch";
 export * as communityBot from "./queries/community/bot";
 export * as communityBotCreation from "./queries/community/bot-creation";
+export * as communitySeedResearcherWriterRoom from "./queries/community/seed-researcher-writer-room";
 export * as communityAgentInbox from "./queries/community/agent-inbox";
 export * as communityBotAuditLog from "./queries/community/bot-audit-log";
 export * as communityMessageTag from "./queries/community/message-tag";
