@@ -296,9 +296,9 @@ export class CodexDriver<Id extends CodexBackendId = "codex"> implements Backend
       const resuming = Boolean(ctx.config.sessionId);
       const freshParams: Record<string, unknown> = {
         cwd: ctx.workingDirectory,
-        approvalPolicy: "never",
-        sandbox: "danger-full-access",
-        sandbox_mode: "danger-full-access",
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+        sandbox_mode: "workspace-write",
         experimentalRawEvents: true,
       };
       if (f.model) freshParams.model = f.model;
@@ -319,6 +319,8 @@ export class CodexDriver<Id extends CodexBackendId = "codex"> implements Backend
   }
 
   normalizeLine(line: string): AdapterEvent[] {
+    const serverRequest = this.answerServerRequest(line);
+    if (serverRequest) return serverRequest;
     if (this.consumeSettingsUpdateResponse(line)) return [];
     const parsed = tryParseJsonLine(line) as { id?: number; method?: string; error?: { message?: string }; result?: unknown } | null;
     const pending = typeof parsed?.id === "number" ? this.pendingInputs.get(parsed.id) : undefined;
@@ -406,6 +408,41 @@ export class CodexDriver<Id extends CodexBackendId = "codex"> implements Backend
         });
       }
     });
+  }
+
+  /**
+   * Fail-closed answer to a server-to-client request. A line carrying
+   * both an id and a method is a request from the server, not a
+   * response to one of ours. Approval requests arrive only under a
+   * gated approval policy, and a request left unanswered blocks the
+   * turn, so every one gets a response: decline for the two
+   * documented approval methods, a JSON-RPC method-not-found error
+   * for anything else this adapter does not implement.
+   */
+  private answerServerRequest(line: string): AdapterEvent[] | null {
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      return null;
+    }
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    const id = record.id;
+    const method = record.method;
+    if ((typeof id !== "number" && typeof id !== "string") || typeof method !== "string") return null;
+    const stdin = this.proc?.stdin;
+    if (!stdin || stdin.destroyed || stdin.writableEnded || stdin.writable === false) return [];
+    try {
+      if (method === "item/commandExecution/requestApproval" || method === "item/fileChange/requestApproval") {
+        stdin.write(JSON.stringify({ id, result: { decision: "decline" } }) + "\n");
+        return [{ kind: "runtime_diagnostic", severity: "warning", source: "codex_approval_declined", message: `Declined ${method} approval request` }];
+      }
+      stdin.write(JSON.stringify({ id, error: { code: -32601, message: "Method not found" } }) + "\n");
+    } catch {
+      return [];
+    }
+    return [];
   }
 
   private consumeSettingsUpdateResponse(line: string): boolean {

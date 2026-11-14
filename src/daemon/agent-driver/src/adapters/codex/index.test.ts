@@ -502,6 +502,99 @@ describe("CodexDriver initialize payload", () => {
   });
 });
 
+describe("CodexDriver gated launch", () => {
+  const tightened = {
+    approvalPolicy: "on-request",
+    sandbox: "workspace-write",
+    sandbox_mode: "workspace-write",
+  };
+
+  it("launches fresh threads gated, never danger-full-access", async () => {
+    const driver = new CodexDriver();
+    const { process: proc } = await driver.spawn(baseCtx());
+    await Promise.resolve();
+
+    const start = stdinWrites(proc)
+      .map((write) => JSON.parse(write.trim()))
+      .find((message) => message.method === "thread/start");
+    expect(start).toBeDefined();
+    expect(start.params).toMatchObject(tightened);
+    expect(JSON.stringify(start.params)).not.toContain("danger-full-access");
+    expect(JSON.stringify(start.params)).not.toContain('"never"');
+  });
+
+  it("launches resumed threads gated too", async () => {
+    const driver = new CodexDriver();
+    const ctx = baseCtx();
+    ctx.config = { sessionId: "th_prior" };
+    const { process: proc } = await driver.spawn(ctx);
+    await Promise.resolve();
+
+    const resume = stdinWrites(proc)
+      .map((write) => JSON.parse(write.trim()))
+      .find((message) => message.method === "thread/resume");
+    expect(resume).toBeDefined();
+    expect(resume.params).toMatchObject(tightened);
+  });
+
+  it.each([
+    "item/commandExecution/requestApproval",
+    "item/fileChange/requestApproval",
+  ])("declines a %s request instead of leaving it unanswered", async (method) => {
+    const driver = new CodexDriver();
+    const { process: proc } = await driver.spawn(baseCtx());
+    await Promise.resolve();
+    const stdin = (proc as unknown as { stdin: { write: ReturnType<typeof vi.fn> } }).stdin;
+    stdin.write.mockClear();
+
+    const events = driver.normalizeLine(JSON.stringify({
+      jsonrpc: "2.0", id: 77, method,
+      params: { threadId: "th_1", turnId: "tu_1", itemId: "it_1", reason: "needs escalation" },
+    }));
+
+    expect(stdin.write).toHaveBeenCalledTimes(1);
+    const response = JSON.parse(stdin.write.mock.calls[0][0] as string);
+    expect(response).toEqual({ id: 77, result: { decision: "decline" } });
+    expect(events).toContainEqual(expect.objectContaining({
+      kind: "runtime_diagnostic",
+      source: "codex_approval_declined",
+    }));
+  });
+
+  it("answers an unhandled server request with a JSON-RPC method-not-found error", async () => {
+    const driver = new CodexDriver();
+    const { process: proc } = await driver.spawn(baseCtx());
+    await Promise.resolve();
+    const stdin = (proc as unknown as { stdin: { write: ReturnType<typeof vi.fn> } }).stdin;
+    stdin.write.mockClear();
+
+    const events = driver.normalizeLine(JSON.stringify({
+      jsonrpc: "2.0", id: 78, method: "item/permissions/requestApproval",
+      params: { threadId: "th_1", turnId: "tu_1" },
+    }));
+
+    expect(stdin.write).toHaveBeenCalledTimes(1);
+    const response = JSON.parse(stdin.write.mock.calls[0][0] as string);
+    expect(response).toEqual({ id: 78, error: { code: -32601, message: "Method not found" } });
+    expect(events).toEqual([]);
+  });
+
+  it("does not answer notifications or responses", async () => {
+    const driver = new CodexDriver();
+    const ctx = baseCtx();
+    ctx.prompt = "";
+    const { process: proc } = await driver.spawn(ctx);
+    await Promise.resolve();
+    const stdin = (proc as unknown as { stdin: { write: ReturnType<typeof vi.fn> } }).stdin;
+    stdin.write.mockClear();
+
+    driver.normalizeLine(JSON.stringify({ method: "thread/started", params: { thread: { id: "th_1" } } }));
+    driver.normalizeLine(JSON.stringify({ jsonrpc: "2.0", id: 2, result: { thread: { id: "th_1" } } }));
+
+    expect(stdin.write).not.toHaveBeenCalled();
+  });
+});
+
 // The `thread/start` (or resume) RESULT line carries the new thread id and is
 // what the normalizer adopts as the session — feeding it to normalizeLine is what
 // triggers the deferred initial-prompt delivery.
@@ -515,7 +608,7 @@ function threadStartedNotif(threadId: string): string {
 }
 
 function stdinWrites(proc: unknown): string[] {
-  const stdin = (proc as { stdin: { write: ReturnType<typeof vi.fn> } }).stdin;
+  const stdin = (proc as unknown as { stdin: { write: ReturnType<typeof vi.fn> } }).stdin;
   return stdin.write.mock.calls.map((c) => c[0] as string);
 }
 function turnStarts(writes: string[]): any[] {
