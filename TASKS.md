@@ -37,6 +37,13 @@ Company That Work Like Actual Employees" (Nimble hosted + Alook open-source).
 3. First NativeLayer change (scope before building): fork note / branding
    in README, plus a seed room with a Researcher → Writer pair mirroring
    the article's diagram. Keep the Alook name and Apache-2.0 attribution.
+   DONE 2026-11-14: README fork note pushed as b65d3d4; Codex launch
+   tightened first (approvalPolicy "on-request", sandbox "workspace-write",
+   fail-closed decline responder) pushed as d2e7b0a; seed room built and
+   pushed as 199c46e — idempotent owner-local seed (seedResearcherWriterRoom)
+   + Bun runner src/shared/scripts/seed-researcher-writer-room.ts, 9/9 module
+   tests green, runner proven twice against a real local D1 file. Runtime QA
+   journeys (live @mention → draft → human approval) UNRUN — PC-side only.
 4. Gemini path: Gemini arrives via the Antigravity adapter
    (gemini-3.8-flash models, GEMINI_API_KEY / GEMINI_HOME). Verify that
    adapter with his Gemini key on a real machine before depending on it.
