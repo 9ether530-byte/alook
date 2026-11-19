@@ -527,6 +527,53 @@ async function expectReturnReadsAndGets(
   expect(tracker.failures).toEqual([])
 }
 
+test("mobile taps dismiss keyboard and existing menu without changing draft or messages", async ({ caseActors }) => {
+  const actors = await caseActors(["alice"])
+  const serverId = await actors.seed.seedServer("alice", `Tap-dismiss-${Date.now()}`)
+  const channelId = await actors.seed.seedChannel("alice", serverId, "tap-dismiss")
+  const firstId = await actors.seed.seedMessage("alice", channelId, "First dismissal target")
+  for (let index = 0; index < 4; index++) {
+    await actors.seed.seedMessage("alice", channelId, `Spacing message ${index}`)
+  }
+  const lastId = await actors.seed.seedMessage("alice", channelId, "Last dismissal target")
+  const alice = await actors.asUser("alice", { hasTouch: true })
+  await installInputCapability(alice.page, false)
+  await alice.page.setViewportSize({ width: 390, height: 844 })
+  const proxy = await proxyCommunityWebSockets(alice.context)
+  await gotoAfterUserWsAuth(alice.page, `/c/channels/${serverId}/${channelId}`)
+  await ignoreNextDevToolsPointerCapture(alice.page)
+  const first = alice.page.getByTestId(tid.message(firstId)).getByText("First dismissal target", { exact: true })
+  const last = alice.page.getByTestId(tid.message(lastId)).getByText("Last dismissal target", { exact: true })
+  const editor = composerEditable(alice.page)
+  const beforeSeq = await latestSeq(alice.page, channelId)
+  const creates = () => proxy.frames.filter(frame => communityFrameEvents(frame).some(event => event.type === "community:message.create")).length
+  const beforeCreates = creates()
+  await editor.fill("Keep this draft")
+  await expect(editor).toBeFocused()
+  await last.tap()
+  await expect(editor).not.toBeFocused()
+  await expect(alice.page.getByRole("menu")).toHaveCount(0)
+  await expect(editor).toHaveText("Keep this draft")
+  await last.tap()
+  await expect(alice.page.getByRole("menu")).toHaveCount(1)
+  const outsidePoint = await first.evaluate(element => {
+    const rect = element.getBoundingClientRect()
+    const menu = document.querySelector('[role="menu"]')!.getBoundingClientRect()
+    return [rect.left + 4, rect.right - 4].map(x => ({ x, y: rect.top + 8 }))
+      .find(point => point.y > 0 && point.y < window.innerHeight
+        && (point.x < menu.left || point.x > menu.right || point.y < menu.top || point.y > menu.bottom))
+  })
+  expect(outsidePoint).toBeTruthy()
+  await alice.page.touchscreen.tap(outsidePoint!.x, outsidePoint!.y)
+  await expect(alice.page.getByRole("menu")).toHaveCount(0)
+  await first.tap()
+  await expect(alice.page.getByRole("menu")).toHaveCount(1)
+  await alice.page.keyboard.press("Escape")
+  await expect(alice.page.getByRole("menu")).toHaveCount(0)
+  expect(await latestSeq(alice.page, channelId)).toBe(beforeSeq)
+  expect(creates()).toBe(beforeCreates)
+})
+
 test("same message row recovers its action menu from mouse to touch", async ({ caseActors }) => {
   const actors = await caseActors(["alice"])
   const { asUser } = actors
@@ -645,20 +692,22 @@ test("mobile reply, avatar mention, and typing rail keep exact backend and WS id
   const beforeRejectedSwipeSeq = await latestSeq(alice.page, channelId)
   const beforeRejectedSwipeFrames = bobProxy.frames.length
   await dispatchSwipePathAndClick(alice.page, channelBobMessageId, [
-    { x: 76, y: 1 },
+    { x: -76, y: 1 },
     { x: 0, y: 1 },
   ])
   await expect(alice.page.getByText("Replying to", { exact: false })).toHaveCount(0)
   await expect(alice.page.getByRole("menuitem")).toHaveCount(0)
-  await dispatchSwipePathAndClick(alice.page, channelBobMessageId, [{ x: 32, y: 1 }])
+  await dispatchSwipePathAndClick(alice.page, channelBobMessageId, [{ x: -32, y: 1 }])
   await expect(alice.page.getByText("Replying to", { exact: false })).toHaveCount(0)
   await expect(alice.page.getByRole("menuitem")).toHaveCount(0)
   await dispatchSwipe(alice.page, channelBobMessageId, { x: 6, y: 48 })
   await expect(alice.page.getByText("Replying to", { exact: false })).toHaveCount(0)
+  await dispatchSwipe(alice.page, channelBobMessageId, { x: 72, y: 2 })
+  await expect(alice.page.getByText("Replying to", { exact: false })).toHaveCount(0)
   expect(await latestSeq(alice.page, channelId)).toBe(beforeRejectedSwipeSeq)
   expect(bobProxy.frames).toHaveLength(beforeRejectedSwipeFrames)
 
-  await dispatchSwipe(alice.page, channelBobMessageId, { x: 72, y: 2 })
+  await dispatchSwipe(alice.page, channelBobMessageId, { x: -72, y: 2 })
   const replyPreview = alice.page.locator('[data-slot="composer-reply-preview"]')
   await expect(replyPreview).toHaveText(`Replying to ${bobInfo.name} · channel target ${stamp}`)
   await expect(composerEditable(alice.page).locator(`[data-type="mention"][data-id="${userId("bob")}"]`)).toHaveCount(1)
@@ -666,7 +715,7 @@ test("mobile reply, avatar mention, and typing rail keep exact backend and WS id
   await expect(replyPreview).toHaveCount(0)
   expect(await latestSeq(alice.page, channelId)).toBe(beforeRejectedSwipeSeq)
 
-  await dispatchSwipe(alice.page, channelBobSecondMessageId, { x: 72, y: 2 })
+  await dispatchSwipe(alice.page, channelBobSecondMessageId, { x: -72, y: 2 })
   await expect(replyPreview).toHaveText(`Replying to ${bobInfo.name} · channel alternate ${stamp}`)
   await expect(composerEditable(alice.page).locator(`[data-type="mention"][data-id="${userId("bob")}"]`)).toHaveCount(1)
   const replyBody = `swipe reply ${stamp}`
@@ -783,7 +832,7 @@ test("mobile reply, avatar mention, and typing rail keep exact backend and WS id
   )), { timeout: 20_000 }).toBe(true)
   await expect(bob.page.getByTestId(tid.message(mentionPayload.message.id))).toBeVisible()
 
-  await dispatchSwipe(alice.page, threadBobMessageId, { x: 72, y: 1 })
+  await dispatchSwipe(alice.page, threadBobMessageId, { x: -72, y: 1 })
   await expect(replyPreview).toHaveText(`Replying to ${bobInfo.name} · thread target ${stamp}`)
   await expect(composerEditable(alice.page, aliceThread).locator(`[data-type="mention"][data-id="${userId("bob")}"]`)).toHaveCount(1)
   const threadReplyBody = `thread swipe reply ${stamp}`
@@ -1037,7 +1086,7 @@ test("mobile reply, avatar mention, and typing rail keep exact backend and WS id
   const dmEditable = composerEditable(alice.page)
   const manualDmDraft = `before @${bobInfo.name}#${bobInfo.discriminator} after`
   await dmEditable.fill(manualDmDraft)
-  await dispatchSwipe(alice.page, dmWsReadyId, { x: 72, y: 1 })
+  await dispatchSwipe(alice.page, dmWsReadyId, { x: -72, y: 1 })
   await expect(replyPreview).toHaveText(`Replying to ${bobInfo.name} · dm reply target ${stamp}`)
   await expect(dmEditable).toHaveText(manualDmDraft)
   await expect(dmEditable.locator('[data-type="mention"]')).toHaveCount(0)
@@ -1045,7 +1094,7 @@ test("mobile reply, avatar mention, and typing rail keep exact backend and WS id
   await expect(replyPreview).toHaveCount(0)
   await expect(dmEditable).toHaveText(manualDmDraft)
   await dmEditable.fill("")
-  await dispatchSwipe(alice.page, dmWsReadyId, { x: 72, y: 1 })
+  await dispatchSwipe(alice.page, dmWsReadyId, { x: -72, y: 1 })
   await expect(replyPreview).toHaveText(`Replying to ${bobInfo.name} · dm reply target ${stamp}`)
   await expect(dmEditable).toHaveText("")
   await expect(dmEditable.locator('[data-type="mention"]')).toHaveCount(0)

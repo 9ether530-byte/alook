@@ -6,7 +6,7 @@ import { Drawer as SheetPrimitive } from "@base-ui/react/drawer"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { AppEdgeFade, appBackdropClassName } from "./app-edge-fade"
-import { XIcon } from "lucide-react"
+import { XIcon } from "@/components/icons/lucide";
 import { SwipeRoot, SwipeViewport, SwipePopup, SwipeBackdrop, type SwipeRootProps } from "./swipe-container"
 import type { SwipeDirection } from "./swipe-gesture-policy"
 
@@ -117,7 +117,7 @@ function SheetBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-body"
-      className={cn("flex-1 overflow-y-auto thin-scrollbar px-4 sm:px-6 py-4", className)}
+      className={cn("flex-1 overflow-x-hidden overflow-y-auto thin-scrollbar px-4 sm:px-6 py-4", className)}
       {...props}
     />
   )

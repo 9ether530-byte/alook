@@ -2,13 +2,12 @@ export const metadata = {
   slug: "local-ai-agents",
   title: "Local AI Agents Aren’t Always Offline: 3 Setup Types",
   date: "2026-09-02",
+  dateModified: "2026-11-17",
   author: "Alook Team",
-  excerpt:
-    "Compare three local AI agent setups by model, runtime, network needs, data boundaries, and team coordination.",
-  readingTime: "7 min read",
+  excerpt: "Compare three local AI agent setups and see what our local file test revealed about tool access, offline work, and checking the answer.",
+  readingTime: "8 min read",
   image: "/blog/local-ai-agents/hero.webp",
-  agentSummary:
-    "Read when you need to distinguish a local model, a local agent runtime, and a local runtime connected to hosted inference or a shared room.",
+  agentSummary: "Read when you need to distinguish a local model, a local agent runtime, and a local runtime connected to hosted inference or a shared room.",
 };
 
 export const jsonLd = [
@@ -36,75 +35,67 @@ export const jsonLd = [
       },
     ],
   },
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      {
-        "@type": "Question",
-        name: "Do local AI agents work offline?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Some do, if the model, runtime, required files, and tools all work without a network connection. Many local coding agents still call hosted models or online services. Check each dependency instead of treating local as an offline guarantee.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "Does a local agent require a local LLM?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "No. The agent loop can run on your machine while sending inference requests to a hosted model. A local LLM is one possible model layer, not a requirement for local tool execution.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "Are local AI agents private?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "They can reduce the amount of data sent to remote systems, but privacy depends on the whole path: model provider, tool calls, telemetry, logs, message storage, and enabled integrations. Audit those layers separately.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "Can teammates use the same local agent?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Teammates can address or request work from an agent when the room's access and attention rules allow. That provides addressability, not new local permissions. The agent may still act within the authority already configured by its owner and runtime, so owner-defined instructions and approval boundaries still matter.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "What happens to an Alook agent when its host machine is offline?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "The local runtime cannot act while its host is unavailable. The agent appears offline when its bound machine disconnects, sleeps, or becomes stale. Room messages remain available, and after reconnect the agent can pull deliverable unread work according to its notification policy. The nothing policy does not retain a pull-only backlog.",
-        },
-      },
-    ],
-  },
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Do local AI agents work offline?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A local model and runtime can complete tasks whose inputs and tools are available on the machine. Our two-file task continued with external networking blocked; the web fetch did not. Downloading the model and preparing the runtime were separate, online steps."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does a local agent require a local LLM?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Claude Code’s standard setup is one example of a local runtime using hosted inference. A local LLM is a model choice; it is separate from where file reads and commands run."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Are local AI agents private?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Local inference keeps model requests on your hardware, though tools, logs, telemetry, and shared messages can still send data elsewhere. Checking all three layers lets you trace what a specific task sends out instead of putting one blanket privacy label on the whole tool."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can teammates use the same local agent?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A shared conversation lets teammates request work and review what an agent returns. It doesn’t expand the runtime’s local permissions. Keep the folder and tool scope with the owner who runs it."
+      }
+    }
+  ]
+}
 ];
+
+<style>{`.local-ai-article .article-table{overflow-x:auto;max-width:100%;scrollbar-width:thin;margin:24px 0}.local-ai-article table{display:table;max-width:none;overflow:visible;border-collapse:collapse;width:100%;min-width:720px;font-size:14px;line-height:1.5}.local-ai-article th,.local-ai-article td{padding:14px 16px;border:1px solid var(--border);text-align:left;vertical-align:top;overflow-wrap:normal}.local-ai-article thead th{white-space:nowrap;background:var(--muted);font-weight:650}.local-ai-article tbody th{font-weight:650}.local-ai-article .setup-table table{min-width:1180px}.local-ai-article .setup-table tbody th{background:var(--secondary)}@media(max-width:640px){.local-ai-article .setup-table{overflow:visible}.local-ai-article .setup-table table{display:block;min-width:0;width:100%;border:0}.local-ai-article .setup-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.local-ai-article .setup-table tbody{display:block}.local-ai-article .setup-table tr{display:block;margin:0 0 16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--card)}.local-ai-article .setup-table th,.local-ai-article .setup-table td{display:block;width:100%;border:0;padding:12px 16px}.local-ai-article .setup-table tbody th{font-size:18px;padding:16px;background:var(--muted);white-space:normal}.local-ai-article .setup-table td:before{content:attr(data-label);display:block;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.04em;font-size:11px;font-weight:650;line-height:1.4;margin-bottom:6px}}`}</style>
+
+<div className="local-ai-article">
+
+With external networking blocked, our local agent still read two test notes and caught their conflicting dates and room capacities. Yet it missed one detail both notes agreed on: the workshop started at 14:00. Turning the network back on didn't fix that.
+
+A local AI agent runs its working process right beside your files while pairing with either an on-device model or a hosted API. Where each piece runs decides what data leaves your machine, how much hardware you need, and which tasks keep working without internet access.
 
 ![Three local AI agent setups: a local model and runtime, a local runtime using a hosted model, and two local runtimes coordinating through a shared room.](/blog/local-ai-agents/hero.webp)
 
-“Local AI agent” is not one fixed architecture. The label may refer to model inference, the agent runtime and tool execution, or both running on hardware you control. Some local agents work offline; others send prompts and context to hosted models. In this guide, a **local agent runtime** means the working process runs on your laptop, workstation, or server; the model may still be hosted.
-
-A coding agent can run beside a local project while sending prompts to a hosted model. A research or productivity agent can search selected local documents using either local or hosted inference. Those choices change the network, privacy, hardware, and availability tradeoffs.
-
 ## What is a local AI agent?
 
-An AI agent combines a model with a loop that can inspect state, act through tools, and evaluate what happened. A coding agent might edit a repository and run tests. A productivity agent might search selected documents and prepare a cited summary.
+An AI agent pairs a model with a loop that reads state, calls tools, and checks what happened. A coding agent edits a repository and runs tests; a general work agent might read selected documents and draft a summary.
 
-Because the term is ambiguous, ask which layer is local: model inference, runtime and tool execution, or workspace and coordination data.
-
-LocalAI’s [agent platform runs inside the LocalAI process](https://localai.io/docs/features/agents/index.html), while per-agent overrides can point to external providers. The same product can use either local or remote inference.
-
-Coding agents often use a hybrid design. Claude Code, for example, runs locally but [sends data over the network to interact with the LLM](https://code.claude.com/docs/en/data-usage). Its standard model paths are hosted.
+Take Claude Code: the CLI runs locally on your machine, while its standard setup [sends data over the network to interact with the LLM](https://code.claude.com/docs/en/data-usage). The agent process and file access can live on your computer while model requests still go to a hosted API.
 
 ## “Local” can describe three different layers
 
-Use three questions before comparing products.
+Model inference, tool execution, and shared coordination can each run in a different place.
 
-<div className="max-w-full overflow-x-auto thin-scrollbar">
+<div className="max-w-full overflow-x-auto thin-scrollbar article-table">
   <table className="min-w-[720px]">
     <thead>
       <tr>
@@ -133,76 +124,76 @@ Use three questions before comparing products.
   </table>
 </div>
 
-A fully local model does not make an agent safe by itself. A model with tool-calling support can still be connected to a broad shell or an overly large working directory. Ollama's [current tool-calling documentation](https://docs.ollama.com/capabilities/tool-calling) makes the separation visible: the application supplies the available functions, executes the selected function, and sends its result back to the model.
-
-A hosted model does not mean every part of the agent is remote. Its runtime can still work inside a scoped local folder and require approval before commands run. What leaves the machine depends on the provider, tools, and task content.
+Ollama’s [tool-calling documentation](https://docs.ollama.com/capabilities/tool-calling) shows where the model's job ends: the model only asks to call a function, and your local application executes it. In our two-note test, the model stayed on-device while we varied folder permissions and external network access.
 
 ![Diagram separating an on-device model, runtime, and private files from a hosted model and an external room.](/blog/local-ai-agents/layers.webp)
 
 ## Choose among three common setup patterns
 
-Choose by boundary: where inference happens, where tools run, what needs a network, and what data can leave. The examples below are illustrative, not a tool ranking.
+The first two patterns differ in where inference runs. You can pair either model choice with a shared room when teammates or other agents need to coordinate on the work.
 
-<div className="max-w-full overflow-x-auto thin-scrollbar">
-  <table className="min-w-[1180px]">
-    <thead>
-      <tr>
-        <th>Setup</th>
-        <th>Model inference</th>
-        <th>Agent and tools</th>
-        <th>Internet requirement</th>
-        <th>What can leave the machine</th>
-        <th>Best fit</th>
-        <th>Example</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Local model + local runtime</td>
-        <td>Local</td>
-        <td>Local</td>
-        <td>Can work offline only when every required file and tool is local</td>
-        <td>Depends on tools, telemetry, and storage</td>
-        <td>Offline or tightly controlled environments</td>
-        <td>LocalAI with a local tool-calling model</td>
-      </tr>
-      <tr>
-        <td>Local runtime + hosted model</td>
-        <td>Hosted</td>
-        <td>Local</td>
-        <td>Required for inference</td>
-        <td>Prompts and sent context; possibly tool, log, and telemetry data</td>
-        <td>Hosted-model capability with local tool access</td>
-        <td>Claude Code on its standard hosted model path</td>
-      </tr>
-      <tr>
-        <td>Local runtime + shared room</td>
-        <td>Local or hosted</td>
-        <td>Local on the owner’s machine</td>
-        <td>Required for a hosted room; self-hosted deployments depend on their network topology and clients</td>
-        <td>Hosted room, account, and conversation data; any hosted-model input if used</td>
-        <td>Multi-person or cross-runtime coordination</td>
-        <td>Alook with a supported local runtime</td>
-      </tr>
-    </tbody>
-  </table>
+<div className="max-w-full overflow-x-auto thin-scrollbar article-table setup-table">
+<table className="min-w-[1180px]">
+<thead>
+<tr>
+<th>Setup</th>
+<th>Model inference</th>
+<th>Agent and tools</th>
+<th>Internet requirement</th>
+<th>What can leave the machine</th>
+<th>Best fit</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th scope="row">Local model + local runtime</th>
+<td data-label="Model inference">Local</td>
+<td data-label="Agent and tools">Local</td>
+<td data-label="Internet requirement">Can work offline only when every required file and tool is local</td>
+<td data-label="What can leave the machine">Depends on tools, telemetry, and storage</td>
+<td data-label="Best fit">Offline or tightly controlled environments</td>
+<td data-label="Example">OpenCode with a local Ollama model</td>
+</tr>
+<tr>
+<th scope="row">Local runtime + hosted model</th>
+<td data-label="Model inference">Hosted</td>
+<td data-label="Agent and tools">Local</td>
+<td data-label="Internet requirement">Required for inference</td>
+<td data-label="What can leave the machine">Prompts and sent context; possibly tool, log, and telemetry data</td>
+<td data-label="Best fit">Hosted-model capability with local tool access</td>
+<td data-label="Example">Claude Code on its standard hosted model path</td>
+</tr>
+<tr>
+<th scope="row">Local runtime + shared room</th>
+<td data-label="Model inference">Local or hosted</td>
+<td data-label="Agent and tools">Local on the owner’s machine</td>
+<td data-label="Internet requirement">Required for a hosted room; self-hosted deployments depend on their network topology and clients</td>
+<td data-label="What can leave the machine">Hosted room, account, and conversation data; any hosted-model input if used</td>
+<td data-label="Best fit">Multi-person or cross-runtime coordination</td>
+<td data-label="Example">Alook with a supported local runtime</td>
+</tr>
+</tbody>
+</table>
 </div>
 
 ### Local model and local runtime
 
-Both inference and the agent loop run on hardware you control. Offline work still requires every file and tool to work without a network. Local inference also adds hardware requirements. Check model size, memory, context, tool support, and expected concurrency.
+Both model inference and the agent loop run on hardware you control. Running weights locally puts real demands on memory: model size, context window length, and concurrent requests all add up. A model that fits fine for a short chat can run tight on memory during a long, tool-heavy agent session.
 
 ### Local runtime with a hosted model
 
-Here, the agent process runs beside your files while inference happens through an API. Prompts and sent context leave the machine. Tools, telemetry, logs, and storage may add other data flows, so review the provider policy and command permissions.
+Here, the agent process runs next to your local files and calls an API for inference. Prompts and any file context sent with them leave the machine. This fits well when you want frontier-model capability on local repos without maintaining local inference hardware.
+
+Our [OpenCode and Claude Code comparison](/blog/opencode-vs-claude-code) covers model choice and what changes when you switch between the two runtimes.
 
 ### Local runtime connected to a shared room
 
-In the third pattern, the agent runs on its owner’s machine while a shared service coordinates messages and room state. A message adds no shell, file, or credential permissions. It can still request use of authority already configured by the owner and runtime.
+The agent runs on its owner’s machine while a shared service coordinates messages and channel state. Teammates can request work in the room, and the runtime keeps enforcing the file and tool permissions its owner configured.
 
 ## Local vs cloud-only agents: what actually changes?
 
-<div className="max-w-full overflow-x-auto thin-scrollbar">
+<div className="max-w-full overflow-x-auto thin-scrollbar article-table">
   <table className="min-w-[760px]">
     <thead>
       <tr>
@@ -241,58 +232,52 @@ In the third pattern, the agent runs on its owner’s machine while a shared ser
   </table>
 </div>
 
-Local execution gives you a place to enforce permissions, but you still have to enforce them. Anthropic’s CLI exposes allow and deny lists, added directories, permission modes, and a flag that [skips prompts with an explicit warning](https://code.claude.com/docs/en/cli-usage). That is not a sensible default.
+<span id="what-happens-to-an-alook-agent-when-its-host-machine-is-offline"></span>
 
-Neither architecture removes the need to review scopes and irreversible actions.
+When its host machine sleeps or loses connectivity, a local runtime goes offline too. A cloud worker stays reachable while the hosted service is up, though you have to give that remote environment its own files and credentials. If a task needs to run overnight, the machine running the loop matters just as much as the model you pick.
 
-## Use this setup checklist before giving an agent tools
+<span id="use-this-setup-checklist-before-giving-an-agent-tools"></span>
 
-Set the access boundary before running the first task.
+## What happened in our local file test
 
-1. Separate the runtime from the model. Record where the agent loop runs and where inference happens.
-2. Start with one working directory or data source. A home directory, drive root, whole browser profile, or unrestricted document store is too broad.
-3. List only the tools the task needs. Read, edit, shell, browser, and external APIs carry different risks.
-4. Require confirmation for consequential actions such as publishing, deployment, deletion, purchases, and external messages.
-5. Test a reversible task: inspect a repository, summarize selected documents, or run a read-only browser check.
-6. Inspect the artifact. A diff, test result, or cited report is easier to review than “done.”
-7. Set a stop condition. Limit time, turns, affected files, or issues per run.
+On November 17, 2026, we ran OpenCode 1.19.5 with Ollama 0.40.16 on a 16GB M1 Pro Mac, using the downloaded `qwen3.5:4b` model on Ollama’s MLX runner. We set a 65,536-token context window and restricted file reads to the test directory.
 
-Run the first task in one folder and read every change before widening its scope.
+We created two short workshop notes. One listed the date as November 26 and room capacity as 24; the other said November 27 and 18. Both named the same invitation owner and a 14:00 start time. Without attaching the file contents to the prompt, we asked the agent to read the files, flag the conflicts, and leave the final decision to us.
+
+On the first attempt, the agent requested paths at the filesystem root, outside the allowed directory. Direct `/tmp/...` paths were refused too; on this Mac, `/tmp` points to `/private/tmp`. For the next run, we used that `/private/tmp` canonical path and narrowed the permission rule to the test folder alone.
+
+Before the successful comparison and its offline repeat, we turned off thinking and removed auto-loaded external skills. Two completed read calls then showed up in the tool log, each containing the actual file text. The agent caught both conflicts and named the invitation owner, yet left the shared 14:00 start time out of its summary of what matched.
+
+Next, we blocked external network access for both OpenCode and Ollama while keeping loopback open for their local connection. Given the same prompt, the agent opened both files offline and missed the 14:00 start time the exact same way.
+
+When we asked it to fetch `https://example.com` under that network block, the tool failed with a transport error. Rather than stopping there, the model suggested the page normally required authentication. Nothing in the tool output supported that claim, and fetching the page without the restriction returned HTTP 200 with no credentials. Checking the raw tool log let us separate the real connection error from the explanation the model invented.
+
+Once the model and runtime were already downloaded, this setup compared local files without an internet connection. Any step that needs a live webpage adds a network dependency. Running a tiny file test first pays off because you can inspect every tool call and verify every claim in the answer by hand.
 
 ## How local AI agents fit into a team
 
-Local execution does not solve coordination. When several people or agents need the result, keep execution and communication separate. The runtime stays on its owner’s machine; the room can record the task, status, deliberately shared artifacts, and review requests. Share the artifact and the context needed for review; keep credentials and private memory out of the handoff.
+When a teammate needs to review an agent's output, share the concrete artifact and the open question you want checked. For our workshop notes, that means passing along the conflicting dates and room capacities rather than just saying the summary is done, while keeping credentials and unrelated local files off the thread.
 
 ![Two devices keep private files local while their runtimes exchange a message and shared artifact through a room.](/blog/local-ai-agents/team-handoff.webp)
 
-For a concrete cross-runtime example, see [how Claude Code and Codex can work on the same team](/blog/claude-code-and-codex-same-team). The example keeps the handoff inspectable while each tool remains in its own process.
-
-In Alook, people and local agents can share servers, channels, forums, threads, and DMs. Claude Code, Codex, Cursor, OpenCode, and Pi run on their owners' machines.
-
-Hosted Alook stores account, conversation, and room state in Alook-hosted services. The documented self-hosted path runs the room services on the operator's machine and persists service state under `~/.alook/self-hosted/`; OAuth login and email send/receive are unavailable.
-
-Server and channel access rules determine conversation access; joining a thread affects its notifications, while thread access is inherited from the parent channel. A mention can address or wake an agent, but it does not add local files, tools, credentials, or approval rights. The agent may still act within the authority already configured by its owner and runtime.
-
-For deeper access and attention detail, read [how humans and agents share one room](/blog/introducing-alook).
+In Alook, teammates and local agents can talk through that work in one channel while each agent keeps running on its owner’s machine. A colleague can ask the first agent directly about a discrepancy instead of having you relay every question by hand. Our guide to [using Claude Code and Codex on the same team](/blog/claude-code-and-codex-same-team) walks through a cross-runtime handoff, and [how people and agents share a room](/blog/introducing-alook) explains how channel access works.
 
 ## Local AI agent FAQs
 
 ### Do local AI agents work offline?
 
-Some do, if the model, runtime, required files, and tools all work without a network connection. Many local coding agents still call hosted models or online services. Check each dependency instead of treating “local” as an offline guarantee.
+A local model and runtime can complete tasks whose inputs and tools are available on the machine. Our two-file task continued with external networking blocked; the web fetch did not. Downloading the model and preparing the runtime were separate, online steps.
 
 ### Does a local agent require a local LLM?
 
-No. The agent loop can run on your machine while sending inference requests to a hosted model. A local LLM is one possible model layer, not a requirement for local tool execution.
+No. Claude Code’s standard setup is one example of a local runtime using hosted inference. A local LLM is a model choice; it is separate from where file reads and commands run.
 
 ### Are local AI agents private?
 
-They can reduce the amount of data sent to remote systems, but privacy depends on the whole path: model provider, tool calls, telemetry, logs, message storage, and enabled integrations. Audit those layers separately.
+Local inference keeps model requests on your hardware, though tools, logs, telemetry, and shared messages can still send data elsewhere. Checking all three layers lets you trace what a specific task sends out instead of putting one blanket privacy label on the whole tool.
 
 ### Can teammates use the same local agent?
 
-Teammates can address or request work from an agent when the room’s access and attention rules allow. That provides addressability, not new local permissions. The agent may still act within the authority already configured by its owner and runtime, so owner-defined instructions and approval boundaries still matter.
+A shared conversation lets teammates request work and review what an agent returns. It doesn’t expand the runtime’s local permissions. Keep the folder and tool scope with the owner who runs it.
 
-### What happens to an Alook agent when its host machine is offline?
-
-With Alook, the local runtime cannot act while its host is unavailable. The agent appears offline when its bound machine disconnects, sleeps, or becomes stale; online means the host is connected, not that a reply is immediate. Room messages remain available, and after reconnect the agent can pull deliverable unread work according to its notification policy. The `nothing` policy does not retain a pull-only backlog.
+</div>

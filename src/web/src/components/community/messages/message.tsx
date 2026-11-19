@@ -8,10 +8,8 @@ import { useAtom, useCreateAtom } from "@tanstack/react-store";
 import { memo, useRef } from "react"
 import { useMessageMarked } from "@/hooks/community/use-inbox"
 import type React from "react"
-import {
-  MessagesSquare, UserPlus, SmilePlus, Reply,
-  MoreHorizontal, X, Share, Check,
-} from "lucide-react"
+import { SmilePlus } from "lucide-react";
+import { ImageOff, MessagesSquare, UserPlus, Reply, MoreHorizontal, X, Share, Check } from "@/components/icons/lucide";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, isSecondaryContextPointer } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu"
 import { Avatar } from "../avatar"
@@ -261,6 +259,7 @@ function MessageImpl({
     pointerType: string | null
   } | null>(null)
   const keyboardLinkActivationRef = useRef(false)
+  const dismissTap = useRef<{ editor: HTMLElement | null; menu: boolean } | null>(null)
   const touchStartedAt = useRef<number | null>(null)
   const suppressLongPressClick = useRef(false)
   const swipeGestureRef = useRef<MobileReplyGesture | null>(null)
@@ -358,6 +357,7 @@ function MessageImpl({
   const activateFromKeyboard = interactive && !selectMode
     ? (event: React.KeyboardEvent<HTMLElement>) => {
         if (!messageEventBelongsToRow(event.target, event.currentTarget)) return
+        dismissTap.current = null
         if (
           (event.key === "Enter" || event.key === " ")
           && !shouldActivateMessageOverlays(event.target)
@@ -412,7 +412,7 @@ function MessageImpl({
         selectable ? "cursor-pointer" : "",
         selected || highlighted ? "bg-primary/10" : "hover:bg-accent/40",
       ].join(" ")}
-      style={swipeVisual.offset > 0
+      style={swipeVisual.offset < 0
         ? { transform: `translate3d(${swipeVisual.offset}px, 0, 0)` }
         : undefined}
       onPointerEnter={activate}
@@ -426,6 +426,13 @@ function MessageImpl({
             keyboardLinkActivationRef.current = false
             const target = messageExternalLinkTargetFromEventTarget(event.target)
             const pointerType = messageLinkPointerType(event.nativeEvent)
+            const active = document.activeElement
+            dismissTap.current = (pointerType === "touch" || pointerType === "pen") && (shouldActivateMessageOverlays(event.target) || !!target)
+              ? {
+                  editor: active instanceof HTMLElement && active.matches('[contenteditable="true"], textarea, input:not([type]), input[type="text"], input[type="search"]') ? active : null,
+                  menu: !!document.querySelector('[data-message-touch-menu][data-open]'),
+                }
+              : null
             if (shouldActivateMessageOverlays(event.target)) {
               if (pointerType === "mouse") setMenuInputModality("desktop")
               else if (pointerType === "touch" || pointerType === "pen") {
@@ -441,6 +448,7 @@ function MessageImpl({
         ? (event) => {
             if (!messageEventBelongsToRow(event.target, event.currentTarget)) return
             linkPointerRef.current = null
+            dismissTap.current = null
           }
         : undefined}
       onPointerDown={swipePointerEnabled
@@ -587,6 +595,15 @@ function MessageImpl({
             if (!messageEventBelongsToRow(event.target, event.currentTarget)) return
             if (selectMode) {
               event.preventDefault()
+              return
+            }
+            const dismissal = dismissTap.current
+            dismissTap.current = null
+            if (dismissal && (dismissal.editor || dismissal.menu) && !suppressLongPressClick.current) {
+              event.preventDefault()
+              event.stopPropagation()
+              dismissal.editor?.blur()
+              setTouchMenuOpen(false)
               return
             }
             const target = messageExternalLinkTargetFromEventTarget(event.target)
@@ -775,7 +792,7 @@ function MessageImpl({
                       frameClassName="block max-w-full rounded-lg border border-border [--attachment-image-max-height:200px] transition-colors hover:border-primary/40 sm:[--attachment-image-max-height:240px]"
                       frameStyle={frameStyle}
                       imageClassName="block rounded-lg object-contain"
-                      errorLabel="Attachment failed to load"
+                      errorLabel={<ImageOff role="img" aria-label="Image unavailable" className="size-7" />}
                       onReady={onImageLoad ? () => onImageLoad() : undefined}
                     />
                   )
@@ -955,8 +972,8 @@ function MessageImpl({
             aria-hidden
             data-mobile-reply-affordance
             data-threshold-crossed={swipeVisual.crossed || undefined}
-            className="absolute inset-y-0 left-0 z-0 flex w-14 items-center justify-center text-muted-foreground"
-            style={{ opacity: Math.min(1, swipeVisual.offset / 48) }}
+            className="absolute inset-y-0 right-0 z-0 flex w-14 items-center justify-center text-muted-foreground"
+            style={{ opacity: Math.min(1, -swipeVisual.offset / 48) }}
           >
             <Reply className="size-5" />
           </div>
@@ -1008,6 +1025,7 @@ function MessageImpl({
       </div>
       {touchMenuActive && (
         <DropdownMenuContent
+          data-message-touch-menu=""
           anchor={touchMenuAnchor ?? undefined}
           positionMethod="fixed"
           side="bottom"

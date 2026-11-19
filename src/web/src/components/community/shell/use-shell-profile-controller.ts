@@ -1,6 +1,6 @@
 "use client"
 
-import { searchCommunityUserIds } from "@/lib/community/user-search"
+import { searchCommunityUsers } from "@/lib/community/user-search"
 import { useAtom, useCreateAtom } from "@tanstack/react-store";
 
 import { useCommunityRuntime } from "@/stores/community/runtime"
@@ -126,10 +126,16 @@ export function useShellProfileController({
     queryKey: ["community", "user-search", lookupHandle],
     enabled: !!lookupHandle,
     retry: false,
-    queryFn: ({ signal, client }) => searchCommunityUserIds(lookupHandle, client, { signal }),
+    queryFn: ({ signal, client }) => searchCommunityUsers(lookupHandle, client, { signal }),
   })
-  const profileUserId = profileTarget?.data.userId ?? (lookupHandle ? lookup.data?.[0] : undefined)
+  const profileUserId = profileTarget?.data.userId ?? (lookupHandle ? lookup.data?.ids[0] : undefined)
+  const isCurrentLookup = () => {
+    if (!lookupHandle) return true
+    const state = queryClient.getQueryState<typeof lookup.data>(["community", "user-search", lookupHandle])
+    return state?.status === "success" && !state.isInvalidated && state.data === lookup.data && state.data?.observed === true
+  }
   const canMessage = !!profileUserId && profileUserId !== currentUser.id
+    && isCurrentLookup()
     && friendsQuery.data !== undefined
     && !blocked.some((user) => user.userId === profileUserId)
     && friends.some((user) => user.userId === profileUserId)
@@ -143,7 +149,7 @@ export function useShellProfileController({
       contextLabel: resolveProfileContextLabel(profileServerId, members.find((member) => member.userId === profileUserId)),
       mutual: canonicalProfile?.mutualServers ?? 0,
       identity: canonicalProfile?.kind === "bot" && canonicalProfile.ownerUserId && canonicalProfile.ownerHandle
-        ? { kind: "bot", ownerProfile: { id: canonicalProfile.ownerUserId, handle: canonicalProfile.ownerHandle }, ownedByViewer: canonicalProfile.ownedByViewer ?? false }
+        ? { kind: "bot", runtime: canonicalProfile.botRuntime ?? null, ownerProfile: { id: canonicalProfile.ownerUserId, handle: canonicalProfile.ownerHandle }, ownedByViewer: canonicalProfile.ownedByViewer ?? false }
         : canonicalProfile?.kind === "human" || profileUserId === currentUser.id ? { kind: "human" } : undefined,
     },
   } : null, [profileTarget, profileServerId, members, profileUserId, canonicalProfile, currentUser.id])
@@ -239,6 +245,7 @@ export function useShellProfileController({
   const profileMessage = async (userId: string, text: string) => {
     const assert = source.capture()
     assert()
+    if (lookupHandle && userId === profileUserId && !isCurrentLookup()) return
     if (!userId) {
       toast("Could not find user")
       return

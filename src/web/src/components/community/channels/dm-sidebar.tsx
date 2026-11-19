@@ -1,9 +1,11 @@
 "use client"
 
+import { EmptyState } from "../empty-state"
 import { CommunityNavigationLink } from "../shell/community-navigation-link"
 import { dmHref } from "@/lib/community/community-route"
 import { memo } from "react"
-import { Users, Ban, Monitor, Bot, Shield, type LucideIcon } from "lucide-react"
+import { type LucideIcon } from "lucide-react";
+import { Users, Ban, Monitor, Bot, Shield, MessagesSquare } from "@/components/icons/lucide";
 import { ConversationResolutionErrorFrame } from "./conversation-resolution-error-frame"
 import { Avatar } from "../avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -67,11 +69,13 @@ export const DmSidebar = memo(function DmSidebar({
               active={shortcut.active}
               onActivate={shortcut.onActivate}
               className={[
-                "flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm font-medium transition-[color,background-color,transform] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-reduce:transition-none",
+                "flex h-9 w-full items-center gap-3 rounded-md px-2 text-sm font-medium transition-[color,background-color,transform] duration-150 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-reduce:transition-none",
                 shortcut.active ? "text-foreground" : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
               ].join(" ")}
             >
-              <shortcut.Icon className="size-5 shrink-0" />
+              <span className="flex size-8 shrink-0 items-center justify-center">
+                <shortcut.Icon className="size-5" />
+              </span>
               <span className="min-w-0 flex-1 truncate">{shortcut.label}</span>
               {shortcut.badge && (
                 <span data-testid={tid.friendsShortcutBadge} className="ml-auto grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
@@ -92,7 +96,7 @@ export const DmSidebar = memo(function DmSidebar({
         ) : loading && dms.length === 0 ? (
           <DmRowsSkeleton />
         ) : dms.length === 0 ? (
-          <p className="px-2 py-4 text-center text-xs text-muted-foreground">Your direct messages will appear here.</p>
+          <EmptyState icon={MessagesSquare} label="Your direct messages will appear here." />
         ) : null}
         {dms.map((d) => {
           const active = d.id === activeDm

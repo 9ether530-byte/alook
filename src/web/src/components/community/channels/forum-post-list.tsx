@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { defaultRangeExtractor, measureElement, useVirtualizer, type Range, type Virtualizer } from "@tanstack/react-virtual"
-import { ListChevronsUpDown } from "lucide-react"
+import { ListChevronsUpDown } from "@/components/icons/lucide";
 import { hashKey } from "@tanstack/react-query"
 import { COMMUNITY_VIRTUALIZER_REACT_OPTIONS } from "@/hooks/community/virtualizer-react-options"
 import { useVirtualCursorPagination } from "@/hooks/community/use-virtual-cursor-pagination"
@@ -139,7 +139,7 @@ function ForumPostListOwner({ posts, loading, observation, hasMore, loadingMore,
       aria-busy={presentation.showSkeleton || undefined} aria-label={presentation.showSkeleton ? "Loading forum" : undefined}
       className={`flex-1 overflow-y-auto thin-scrollbar scroll-fade-y scroll-fade-4 [overflow-anchor:none] ${FORUM_LIST_SPACING_CLASS}`}>
     {!posts.length && loading ? <div data-message-list-content aria-hidden="true" inert data-read-position-ready="false" />
-      : !posts.length ? <div data-message-list-content aria-hidden="false" data-read-position-ready="true"><EmptyState icon={ListChevronsUpDown} label="No posts with this tag yet. Start one with New Post." /></div>
+      : !posts.length ? <div className="flex min-h-full flex-col" data-message-list-content aria-hidden="false" data-read-position-ready="true"><EmptyState icon={ListChevronsUpDown} label="No posts with this tag yet. Start one with New Post." /></div>
       : <VirtualRows directDomUpdatesMode="position" items={posts} virtualizer={virtualizer}
         renderItem={(post, index) => <ForumPostListItem first={index === 0} onActivate={onOpenPost ? () => onOpenPost(post.id) : undefined}>{renderPost(post, index)}</ForumPostListItem>}
         containerAttributes={{ "data-message-list-content": "", "aria-hidden": !presentation.contentVisible, inert: !presentation.contentInteractive,

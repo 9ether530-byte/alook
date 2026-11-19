@@ -18,6 +18,18 @@ function renderChip(chipElement: any): any {
 }
 
 describe("MachineRuntimes", () => {
+  it("shows only the two explicit Codex sources in a mixed machine report", () => {
+    const chips = collectChips(MachineRuntimes({ runtimes: [
+      { id: "codex" }, { id: "codex-app" }, { id: "codex-cli" },
+    ] }));
+    expect(chips.map((chip) => chip.key)).toEqual([".$codex-app", ".$codex-cli"]);
+    const labels = chips.map((chip) => {
+      const badge = renderChip(chip);
+      return Children.toArray(badge.props.children.props.children)[1] as any;
+    }).map((label) => label.props.children);
+    expect(labels).toEqual(["Codex App", "Codex CLI"]);
+  });
+
   it("returns null for an empty runtime list", () => {
     expect(MachineRuntimes({ runtimes: [] })).toBeNull()
   })
@@ -30,18 +42,18 @@ describe("MachineRuntimes", () => {
     const tree = MachineRuntimes({
       runtimes: [
         { id: "claude", version: "1.0.0" },
-        { id: "codex" },
+        { id: "codex-cli" },
       ],
     })
     const chips = collectChips(tree)
     expect(chips).toHaveLength(2)
     // React prefixes user-supplied keys with ".$" via Children.toArray.
     expect(chips[0].key).toBe(".$claude")
-    expect(chips[1].key).toBe(".$codex")
+    expect(chips[1].key).toBe(".$codex-cli")
   })
 
   it("without a version and healthy, the chip is a plain span (no tooltip wrapper)", () => {
-    const tree = MachineRuntimes({ runtimes: [{ id: "codex" }] })
+    const tree = MachineRuntimes({ runtimes: [{ id: "codex-cli" }] })
     const chips = collectChips(tree)
     const rendered = renderChip(chips[0])
     expect(rendered.type).toBe(Badge)
@@ -50,7 +62,7 @@ describe("MachineRuntimes", () => {
     const inner = Children.toArray(fragment.props.children) as any[]
     // [0] logo, [1] id text
     expect(inner).toHaveLength(2)
-    expect(inner[1].props.children).toBe("Codex (automatic)")
+    expect(inner[1].props.children).toBe("Codex CLI")
   })
 
   it("with a version, the chip is wrapped in a Tooltip carrying the version", () => {
@@ -86,7 +98,7 @@ describe("MachineRuntimes", () => {
   it("unhealthy runtimes render dimmed and wrapped in a Tooltip explaining unavailability", () => {
     const tree = MachineRuntimes({
       runtimes: [
-        { id: "codex", status: "unhealthy" as const, lastError: "spawn_enoent" },
+        { id: "codex-cli", status: "unhealthy" as const, lastError: "spawn_enoent" },
       ],
     })
     const chips = collectChips(tree)
@@ -104,25 +116,25 @@ describe("MachineRuntimes", () => {
     expect(triggerRender.props.render.type).toBe("button")
     expect(triggerRender.props.className as string).toContain("opacity-40")
     // aria-label reflects unhealthy state, not a version.
-    expect(triggerRender.props["aria-label"]).toBe("Codex (automatic) unavailable")
+    expect(triggerRender.props["aria-label"]).toBe("Codex CLI unavailable")
   })
 
   it("sorts unhealthy runtimes after healthy ones, preserving relative order within each group", () => {
     const tree = MachineRuntimes({
       runtimes: [
-        { id: "codex", status: "unhealthy" as const },
+        { id: "codex-cli", status: "unhealthy" as const },
         { id: "claude" },
         { id: "pi", status: "unhealthy" as const },
         { id: "cursor" },
       ],
     })
     const chips = collectChips(tree)
-    expect(chips.map((c) => c.key)).toEqual([".$claude", ".$cursor", ".$codex", ".$pi"])
+    expect(chips.map((c) => c.key)).toEqual([".$claude", ".$cursor", ".$codex-cli", ".$pi"])
   })
 
   it("unhealthy without lastError falls back to a generic 'Unavailable — check daemon logs' tooltip", () => {
     const tree = MachineRuntimes({
-      runtimes: [{ id: "codex", status: "unhealthy" as const }],
+      runtimes: [{ id: "codex-cli", status: "unhealthy" as const }],
     })
     const chips = collectChips(tree)
     const rendered = renderChip(chips[0])

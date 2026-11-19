@@ -3,7 +3,6 @@ import { HandAccent } from "@/components/brand/hand-accent";
 import { buildPublicPageMetadata } from "@/lib/seo/public-page-metadata";
 import Image from "next/image";
 import Link from "next/link";
-import { isGuide } from "@blog/lib/blog/guides";
 import { getAllPosts } from "@blog/lib/blog/posts";
 import { blogTopics } from "@blog/lib/blog/topics";
 import { buildBlogPostCards, formatBlogPostDate } from "@blog/lib/blog/post-cards";
@@ -33,7 +32,7 @@ const collectionJsonLd = {
 };
 
 export default async function BlogPage() {
-  const posts = (await getAllPosts()).filter((post) => !isGuide(post));
+  const posts = await getAllPosts();
   const [featured, ...recent] = buildBlogPostCards(posts);
 
   return (
@@ -45,7 +44,6 @@ export default async function BlogPage() {
       />
       <div className="mx-auto max-w-270 px-4 pb-24 pt-12 sm:px-6 sm:pt-20">
         <header>
-          <p className="tn-blog-kicker">From the Alook team</p>
           <h1 className="font-sans text-3xl font-semibold leading-none tracking-tight sm:text-[2.5rem] sm:leading-12">
             <HandAccent>Blog</HandAccent>
           </h1>

@@ -35,6 +35,7 @@ export function TextChannelSurface({
   canManagePins,
   anchorMessageId,
   onNavigateParent,
+  onLeaveChannel,
   notificationLevel,
   onSetNotificationLevel,
   composerMembers,
@@ -57,6 +58,7 @@ export function TextChannelSurface({
   canManagePins: boolean
   anchorMessageId: string | null
   onNavigateParent?: () => void
+  onLeaveChannel?: () => Promise<void>
   notificationLevel: ChannelNotifLevel
   onSetNotificationLevel: (level: ChannelNotifLevel) => void
   composerMembers: ComponentProps<typeof Composer>["members"]
@@ -126,6 +128,7 @@ export function TextChannelSurface({
               notifLevel={notificationLevel}
               onSetNotifLevel={onSetNotificationLevel}
               mobileBack={onNavigateParent}
+              onLeave={onLeaveChannel ? async () => { await onLeaveChannel(); onNavigateParent?.() } : undefined}
             />
           )}
 {(
@@ -231,8 +234,14 @@ export function TextChannelSurface({
               {...memberPanelProps}
               pinned={feed.pinned}
               pinnedLoading={feed.pinnedLoading}
+              pinnedKnown={feed.pinnedKnown}
+              pinnedError={feed.pinnedError}
+              onRetryPinned={feed.retryPinned}
               threads={feed.threads}
               threadsLoading={feed.threadsLoading}
+              threadsKnown={feed.threadsKnown}
+              threadsError={feed.threadsError}
+              onRetryThreads={feed.retryThreads}
               onOpenThread={onOpenThread}
               onOpenProfile={onOpenProfile}
               onJumpToMessage={controller.jumpToSeq}

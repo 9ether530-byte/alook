@@ -1,19 +1,17 @@
 import { ObservedStaticContent } from "@/lib/observability/regions";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+import { ZoneLink } from "@/components/public-layout";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import technostalgia from "@/components/brand/technostalgia.module.css";
-import { ArrowLeft, ArrowRight } from "lucide-react";
-import { isGuide } from "@blog/lib/blog/guides";
+import { ArrowLeft, ArrowRight } from "@/components/icons/lucide";
 import { getAllPosts, getPostBySlug } from "@blog/lib/blog/posts";
 import { buildBlogPostingJsonLd } from "@blog/lib/blog/json-ld";
-import {
-  getBlogTopicBySlug,
-  getBlogTopicEntryBySlug,
-  getNextTopicBridge,
-  getRelatedPosts,
-} from "@blog/lib/blog/topics";
+import { getBlogTopicBySlug, getNextTopicBridge } from "@blog/lib/blog/topics";
 import { BlogPostByline, buildBlogPostMetadata } from "./article-meta";
 import { getBlogOgImage } from "@blog/lib/blog/metadata";
 
@@ -47,10 +45,8 @@ export default async function BlogPostPage({
   const post = await getPostBySlug(slug);
   if (!post) notFound();
 
-  const directory = isGuide(post) ? "/guides" : "/blog";
   const posts = await getAllPosts();
   const topic = getBlogTopicBySlug(slug);
-  const relatedPosts = getRelatedPosts(slug, posts);
   const nextTopicBridge = getNextTopicBridge(slug, posts);
 
   const { default: PostContent, jsonLd } = await import(
@@ -79,11 +75,11 @@ export default async function BlogPostPage({
       )}
       <article className="blog-article mx-auto max-w-3xl px-6 py-12 sm:py-16">
         <Link
-          href={directory}
+          href="/blog"
           className="tn-blog-back inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
         >
           <ArrowLeft className="size-3.5" />
-          {isGuide(post) ? "All guides" : "All posts"}
+          All posts
         </Link>
 
         <header className="mb-10">
@@ -92,7 +88,7 @@ export default async function BlogPostPage({
           </h1>
           {topic && (
             <div className={`${technostalgia.theme} mt-4 w-fit`}>
-              <Badge variant="secondary" className="h-auto py-1 text-sm" render={<Link href={`${directory}#${topic.id}`} />}>
+              <Badge variant="secondary" className="h-auto py-1 text-sm" render={<Link href={`/blog#${topic.id}`} />}>
                 {topic.label}
               </Badge>
             </div>
@@ -104,68 +100,29 @@ export default async function BlogPostPage({
           <PostContent />
         </div>
 
-        {topic && (relatedPosts.length > 0 || nextTopicBridge) && (
-          <aside data-blog-recommendations className="mt-16 border-t border-border pt-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="font-sans text-2xl font-semibold tracking-tight">
-                  Keep exploring
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">{topic.label}</p>
-              </div>
-              <Link
-                href={`/blog#${topic.id}`}
-                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                All in this topic
-              </Link>
-            </div>
-
-            {relatedPosts.length > 0 && (
-              <nav
-                aria-label={`More in ${topic.label}`}
-                className="mt-6 divide-y divide-border border-t border-border"
-              >
-                {relatedPosts.map((relatedPost) => (
-                  <Link
-                    key={relatedPost.slug}
-                    href={`/blog/${relatedPost.slug}`}
-                    className="group grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 py-6 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-                  >
-                    <span className="col-start-1 font-sans text-lg font-semibold leading-snug group-hover:underline underline-offset-4">
-                      {relatedPost.title}
-                    </span>
-                    <span className="col-start-1 mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {getBlogTopicEntryBySlug(relatedPost.slug)?.userJob}
-                    </span>
-                    <span className="col-start-1 mt-2 text-sm text-muted-foreground">
-                      {relatedPost.readingTime}
-                    </span>
-                    <ArrowRight aria-hidden="true" className="col-start-2 row-start-1 row-span-3 size-5 self-center text-muted-foreground group-hover:text-foreground" />
-                  </Link>
-                ))}
-              </nav>
-            )}
-
-            {nextTopicBridge && (
-              <Link
-                href={`/blog/${nextTopicBridge.post.slug}`}
-                className="group mt-8 flex items-center justify-between gap-4 border-t border-border pt-6"
-              >
-                <span>
-                  <span className="block text-sm text-muted-foreground">Next Blog</span>
-                  <span className="mt-2 block font-sans text-lg font-semibold leading-snug group-hover:text-muted-foreground transition-colors">
-                    {nextTopicBridge.post.title}
-                  </span>
-                  <span className="mt-2 block text-sm text-muted-foreground">
-                    {nextTopicBridge.topic.label}
-                  </span>
-                </span>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-              </Link>
-            )}
+        {nextTopicBridge && (
+          <aside data-blog-recommendations className="mt-16">
+            <Link
+              href={`/blog/${nextTopicBridge.post.slug}`}
+              className="tn-blog-card group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 overflow-hidden p-3 sm:grid-cols-[12rem_minmax(0,1fr)_auto] sm:gap-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
+            >
+              <span className="tn-blog-post-image relative hidden overflow-hidden rounded-[10px] border sm:block">
+                <Image src={getBlogOgImage(nextTopicBridge.post)} alt="" fill sizes="12rem" className="object-cover" />
+              </span>
+              <span className="min-w-0 py-1 pl-1 sm:pl-0">
+                <span className="block text-sm text-muted-foreground">Next Blog</span>
+                <span className="mt-1 block font-sans text-lg font-semibold leading-snug text-pretty">{nextTopicBridge.post.title}</span>
+                <span className="mt-1 block text-sm text-muted-foreground">{nextTopicBridge.topic.label}</span>
+              </span>
+              <span className="tn-blog-key mr-1" aria-hidden="true"><ArrowRight size={16} /></span>
+            </Link>
           </aside>
         )}
+
+        <section className={`${technostalgia.theme} mt-12 flex flex-wrap items-center gap-6 border-t border-border pt-8`} aria-label="Continue in Alook">
+          <ZoneLink href="/c" zone="blog" data-variant="default" data-size="lg" className={cn(buttonVariants({ size: "lg" }), "h-11 gap-4 px-6")}>Open Alook<ArrowRight size={16} /></ZoneLink>
+          <Link href="/blog" className="text-sm text-muted-foreground transition-colors hover:text-foreground">More blogs</Link>
+        </section>
       </article>
     </>
   );

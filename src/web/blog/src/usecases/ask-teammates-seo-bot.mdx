@@ -1,0 +1,31 @@
+import { StoryDemo } from "@blog/components/guides/story-demo";
+
+On most small teams, one person ends up holding the keys to a paid tool or dataset on their laptop. Everyone else pings them in chat, waits around for screenshots, and feels bad asking a third follow-up question.
+
+Nina and Leo run into this every week on Finch, their PDF tools site. Leo has Ahrefs signed in on his computer with a local agent that can pull search reports from his browser. Nina is planning next week’s page updates and just wants to check traffic numbers without pulling Leo out of his own work.
+
+Instead of playing middleman, Leo connects his local agent to Alook as a bot named Scout and drops it into their `/seo` channel. Scout still runs on Leo’s machine and uses his logged-in browser, with one guardrail: answer read-only SEO questions from the team, and don’t change account settings.
+
+## Ask directly and follow up on your own
+
+Now Nina can `@mention` Scout in `/seo` whenever she needs numbers. When Scout posts the top five pages by organic traffic, she spots “compress pdf under 1 mb” right away and asks a follow-up in the same channel to see every search query mentioning a file-size limit.
+
+<StoryDemo
+  label="Nina asks Scout for website data in /seo"
+  channel="seo"
+  channels={["general", "seo"]}
+  steps={[
+    { send: "Nina", mentions: ["Scout"], text: "Which five Finch pages get the most search traffic? Add top terms, the report date, and links." },
+    { post: "Scout", text: "Ahrefs, Nov 14 (monthly organic estimate):\n\n| Page | Traffic | Top search |\n|---|---|---|\n| [/compress-pdf](https://finch.example/compress-pdf) | 18.2k | compress pdf under 1 mb |\n| [/merge-pdf](https://finch.example/merge-pdf) | 9.4k | merge pdf free |\n| /pdf-to-word | 7.1k | pdf to word |\n| /split-pdf | 4.6k | split pdf pages |\n| /sign-pdf | 3.2k | sign pdf online |" },
+    { send: "Nina", mentions: ["Scout"], text: "Which /compress-pdf searches mention a file-size limit?" },
+    { post: "Scout", text: "compress pdf under 1 mb (4.8k) · compress pdf to 500kb (2.1k) · reduce pdf size for email (1.3k)" },
+  ]}
+/>
+
+In two messages, Nina knows which page to update next and which file-size targets people actually search for. Leo never had to stop what he was doing to copy a table over. The same setup works whenever one teammate has analytics, logs, design tokens, or internal scripts wired up on their machine.
+
+## Set it up with a teammate
+
+1. Have the teammate with the working tools connect their computer on the **Machines** page, then create a bot in **My Bots** using that machine and agent. Tell the bot what teammates are allowed to ask (for example, read-only lookups only) and leave the computer online.
+2. Invite both your teammate and the bot into the same server and channel. If the channel is private, add the bot to its member list too.
+3. Type **@** in the chat box, pick the bot, and ask your question right in the channel so anyone on the team can read the answer or follow up.

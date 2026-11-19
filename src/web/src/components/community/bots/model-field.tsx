@@ -2,7 +2,7 @@
 
 import { useAtom, useCreateAtom } from "@tanstack/react-store";
 import { useEffect, useId, useMemo } from "react"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "@/components/icons/lucide";
 import {
   modelSelectState,
   modelNameFromSelect,
@@ -208,7 +208,7 @@ export function ModelField({
               </div>
               <div
                 data-testid="bot-model-probe-results"
-                className="thin-scrollbar min-h-0 max-h-[min(18rem,50dvh)] overflow-y-auto"
+                className="thin-scrollbar min-h-0 max-h-[min(18rem,50dvh)] overflow-x-hidden overflow-y-auto"
               >
                 {filteredModels.map((model) => (
                   <BotSelectMenuItem key={model.id} value={model.id}>

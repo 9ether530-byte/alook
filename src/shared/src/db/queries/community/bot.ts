@@ -18,7 +18,7 @@
  * return null / 404 at the route. The victim's state must be untouched.
  */
 
-import { type SQL, aliasedTable, and, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, ne, notExists, or, sql } from "drizzle-orm";
+import { type SQL, aliasedTable, and, desc, eq, exists, gt, gte, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import { user } from "../../schema";
 import {
   communityBotBinding,
@@ -31,14 +31,13 @@ import {
   communityBotDailyActivity,
   communityBotDailyTokenUsage,
   communityBotActivityEvent,
-  communityCategory,
   communityChannel,
   communityChannelMember,
-  communityFriendship,
   communityMessage,
   communityReadStateRevision,
 } from "../../community-schema";
 import type { DailyUsageSnapshot } from "../../../provider-telemetry";
+import type { AgentModelReport, StoredModelObservation } from "../../../model-observation";
 import { communityMachine } from "../../community-machine-schema";
 import type { Database } from "../../index";
 import { communityBotSyntheticEmail } from "../../../constants";
@@ -50,6 +49,9 @@ import { CommunityMachineRuntimeSchema, type CommunityMachineRuntime } from "../
 import { getBotCapacitySummary } from "../product-plan";
 import type { BotCapacitySummary } from "../../../product-entitlements";
 import { isPresenceOnline } from "../../../utils/status";
+import { channelReadableSql } from "./channel";
+import { dmPeerReadableSql } from "./dm";
+import { CHANNEL_TRAITS, reachIsParticipantSet } from "../../../utils/community-roles";
 
 export type BotRow = {
   id: string;
@@ -99,6 +101,7 @@ export async function listBotsForOwner(
   isActive: boolean;
   presence: "online" | "offline";
   tokenUsageTimeZone: string | null;
+  modelObservation?: StoredModelObservation;
 }>> {
   const rows = await db
     .select({
@@ -120,6 +123,7 @@ export async function listBotsForOwner(
       isActive: communityBotBinding.isActive,
       machineStatus: communityMachine.status,
       tokenUsageTimeZone: communityMachine.timeZone,
+      modelObservation: communityBotBinding.modelObservation,
     })
     .from(user)
     .innerJoin(communityBotBinding, eq(communityBotBinding.userId, user.id))
@@ -150,7 +154,32 @@ export async function listBotsForOwner(
     isActive: r.isActive,
     presence: r.isActive && isPresenceOnline(r.machineStatus) ? "online" : "offline",
     tokenUsageTimeZone: r.tokenUsageTimeZone ?? null,
+    ...(r.modelObservation?.machineId === r.machineId && r.modelObservation.backendId === r.runtime
+      ? { modelObservation: r.modelObservation } : {}),
   }));
+}
+
+export async function recordBotModelObservation(
+  db: Database,
+  ownerUserId: string,
+  machineId: string,
+  report: AgentModelReport,
+): Promise<void> {
+  const observedAt = new Date(report.observedAt).toISOString();
+  await db.update(communityBotBinding)
+    .set({ modelObservation: { ...report, observedAt, machineId } })
+    .where(and(
+      eq(communityBotBinding.userId, report.agentId),
+      eq(communityBotBinding.machineId, machineId),
+      eq(communityBotBinding.runtime, report.backendId),
+      eq(communityBotBinding.runtimeConfigRevision, report.runtimeConfigRevision),
+      eq(communityBotBinding.isActive, true),
+      exists(db.select({ id: user.id }).from(user).where(and(
+        eq(user.id, report.agentId), eq(user.ownerUserId, ownerUserId), eq(user.isBot, true), isNull(user.deletedAt),
+      ))),
+      or(isNull(communityBotBinding.modelObservation),
+        sql`json_extract(${communityBotBinding.modelObservation}, '$.observedAt') < ${observedAt}`),
+    ));
 }
 
 export async function getBotDailyTokenUsageForOwner(
@@ -411,91 +440,27 @@ function activationCursorCatchupBuilder(
   ownerId: string,
 ) {
   const message = aliasedTable(communityMessage, "activation_message");
-  const newerMessage = aliasedTable(communityMessage, "activation_newer_message");
+  const latestMessage = aliasedTable(communityMessage, "activation_latest_message");
   const channel = aliasedTable(communityChannel, "activation_channel");
-  const parent = aliasedTable(communityChannel, "activation_parent_channel");
-  const category = aliasedTable(communityCategory, "activation_category");
-  const serverMember = aliasedTable(communityServerMember, "activation_server_member");
-  const anchorMember = aliasedTable(communityChannelMember, "activation_anchor_member");
-  const dmSelf = aliasedTable(communityChannelMember, "activation_dm_self");
-  const dmPeer = aliasedTable(communityChannelMember, "activation_dm_peer");
-  const blocked = aliasedTable(communityFriendship, "activation_dm_block");
-
-  const anchorId = sql<string>`COALESCE(${parent.id}, ${channel.id})`;
-  const anchorCreatorId = sql<string | null>`COALESCE(${parent.creatorId}, ${channel.creatorId})`;
-  const anchorCategoryId = sql<string | null>`COALESCE(${parent.categoryId}, ${channel.categoryId})`;
-  const ownerScopedInactive = exists(ownerScopedBotIds(db, botId, ownerId, false));
-
-  const dmVisible = and(
-    eq(channel.type, "dm"),
-    exists(
-      db
-        .select({ one: sql<number>`1` })
-        .from(dmSelf)
-        .where(
-          and(
-            eq(dmSelf.channelId, channel.id),
-            eq(dmSelf.userId, botId),
-            eq(dmSelf.relation, "access"),
-          ),
-        ),
-    ),
-    notExists(
-      db
-        .select({ one: sql<number>`1` })
-        .from(dmPeer)
-        .innerJoin(
-          blocked,
-          and(
-            eq(blocked.status, "blocked"),
-            or(
-              and(eq(blocked.requesterId, botId), eq(blocked.addresseeId, dmPeer.userId)),
-              and(eq(blocked.requesterId, dmPeer.userId), eq(blocked.addresseeId, botId)),
-            ),
-          ),
-        )
-        .where(
-          and(
-            eq(dmPeer.channelId, channel.id),
-            eq(dmPeer.relation, "access"),
-            ne(dmPeer.userId, botId),
-          ),
-        ),
-    ),
-  );
-
-  const serverVisible = and(
-    ne(channel.type, "dm"),
-    isNotNull(channel.serverId),
-    exists(
-      db
-        .select({ one: sql<number>`1` })
-        .from(serverMember)
-        .where(
-          and(
-            eq(serverMember.serverId, channel.serverId),
-            eq(serverMember.userId, botId),
-          ),
-        ),
-    ),
-    or(
-      isNull(anchorCategoryId),
-      eq(category.private, 0),
-      eq(anchorCreatorId, botId),
-      exists(
-        db
-          .select({ one: sql<number>`1` })
-          .from(anchorMember)
-          .where(
-            and(
-              eq(anchorMember.channelId, anchorId),
-              eq(anchorMember.userId, botId),
-              eq(anchorMember.relation, "access"),
-            ),
-          ),
-      ),
-    ),
-  );
+  const serverIds = db.select({ id: communityServerMember.serverId })
+    .from(communityServerMember).where(eq(communityServerMember.userId, botId));
+  const accessChannelIds = db.select({ id: communityChannelMember.channelId })
+    .from(communityChannelMember).where(and(eq(communityChannelMember.userId, botId), eq(communityChannelMember.relation, "access")));
+  const notifyChannelIds = db.select({ id: communityChannelMember.channelId })
+    .from(communityChannelMember).where(and(eq(communityChannelMember.userId, botId), eq(communityChannelMember.relation, "notify")));
+  const participantTypes = Object.keys(CHANNEL_TRAITS).filter(reachIsParticipantSet);
+  const latestSequencedId = db
+    .select({ id: latestMessage.id })
+    .from(latestMessage)
+    .where(and(eq(latestMessage.channelId, channel.id), gt(latestMessage.seq, 0)))
+    .orderBy(desc(latestMessage.seq))
+    .limit(1);
+  const latestLegacyId = db
+    .select({ id: latestMessage.id })
+    .from(latestMessage)
+    .where(and(eq(latestMessage.channelId, channel.id), eq(latestMessage.seq, 0)))
+    .orderBy(desc(latestMessage.createdAt), desc(latestMessage.id))
+    .limit(1);
 
   const latestVisibleMessages = db
     .select({
@@ -506,25 +471,18 @@ function activationCursorCatchupBuilder(
       lastReadMessageId: message.id,
       lastReadSeq: message.seq,
     })
-    .from(message)
-    .innerJoin(channel, eq(channel.id, message.channelId))
-    .leftJoin(parent, eq(parent.id, channel.parentChannelId))
-    .leftJoin(category, eq(category.id, anchorCategoryId))
+    .from(channel)
+    .innerJoin(message, eq(message.id, sql<string>`COALESCE((${latestSequencedId}), (${latestLegacyId}))`))
     .where(
       and(
-        ownerScopedInactive,
-        or(dmVisible, serverVisible),
-        notExists(
-          db
-            .select({ one: sql<number>`1` })
-            .from(newerMessage)
-            .where(
-              and(
-                eq(newerMessage.channelId, message.channelId),
-                gt(newerMessage.seq, message.seq),
-              ),
-            ),
-        ),
+        exists(ownerScopedBotIds(db, botId, ownerId, false)),
+        or(inArray(channel.serverId, serverIds), inArray(channel.id, accessChannelIds)),
+        or(notInArray(channel.type, participantTypes), inArray(channel.id, notifyChannelIds)),
+        channelReadableSql(botId, {
+          id: channel.id, type: channel.type,
+          serverId: channel.serverId, parentChannelId: channel.parentChannelId,
+        }),
+        or(ne(channel.type, "dm"), dmPeerReadableSql(db, botId, channel.id)),
       ),
     );
 
@@ -874,12 +832,13 @@ export async function listBotsForMachine(
       reasoningEffort: communityBotBinding.reasoningEffort,
       runtimeConfigRevision: communityBotBinding.runtimeConfigRevision,
     })
-    .from(user)
-    .innerJoin(communityBotBinding, eq(communityBotBinding.userId, user.id))
+    .from(communityBotBinding)
+    .crossJoin(user)
     .innerJoin(owner, eq(owner.id, user.ownerUserId))
     .where(
       and(
         eq(communityBotBinding.machineId, machineId),
+        eq(user.id, communityBotBinding.userId),
         options.includeInactive ? undefined : eq(communityBotBinding.isActive, true),
         eq(user.isBot, true),
         isNull(user.deletedAt),
@@ -1147,6 +1106,7 @@ export async function updateBotRuntimeConfig(
     .update(communityBotBinding)
     .set({
       runtime: desired.runtime,
+      modelObservation: sql`CASE WHEN ${communityBotBinding.runtime} <> ${desired.runtime} THEN NULL ELSE ${communityBotBinding.modelObservation} END`,
       modelName: desired.modelName,
       reasoningEffort: desired.reasoningEffort,
       runtimeConfigRevision: sql`${communityBotBinding.runtimeConfigRevision} + 1`,

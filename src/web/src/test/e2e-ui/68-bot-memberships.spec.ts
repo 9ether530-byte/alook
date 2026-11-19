@@ -18,7 +18,7 @@ async function prepareMembershipCase(actors: CaseActors, resources: CaseResource
   const pair = await call("/api/community/machines/pair", "POST")
   expect(pair.status).toBe(200)
   const { tokenId } = await pair.json() as { tokenId: string }
-  const activation = await fetch(`${WEB_URL}/api/community/daemon/activate`, {method:"POST",headers:{Authorization:`Bearer ${tokenId}`,Origin:WEB_URL,"Content-Type":"application/json"},body:JSON.stringify({hostname:`membership-qa-${Date.now()}`,platform:"darwin",arch:"arm64",runtimeReport:[{id:"codex",status:"healthy"}]})})
+  const activation = await fetch(`${WEB_URL}/api/community/daemon/activate`, {method:"POST",headers:{Authorization:`Bearer ${tokenId}`,Origin:WEB_URL,"Content-Type":"application/json"},body:JSON.stringify({hostname:`membership-qa-${Date.now()}`,platform:"darwin",arch:"arm64",runtimeReport:[{id:"codex-cli",status:"healthy"}]})})
   expect(activation.status).toBe(200)
   const {machineId,credential} = await activation.json() as {machineId:string;credential:string}
   resources.own(machineId, async id => {expect([204,404]).toContain((await call(`/api/community/machines/${id}`,"DELETE")).status)})
@@ -26,7 +26,7 @@ async function prepareMembershipCase(actors: CaseActors, resources: CaseResource
   await machine.opened
   const bots: Bot[] = []
   for (const name of ["Research companion", "Release assistant"]) {
-    const response = await call("/api/community/bots","POST",{name,machineId,runtime:"codex"})
+    const response = await call("/api/community/bots","POST",{name,machineId,runtime:"codex-cli"})
     expect(response.status).toBe(201)
     const {bot} = await response.json() as {bot:{id:string;name:string}}
     resources.own(bot.id,async id => {expect([204,404]).toContain((await call(`/api/community/bots/${id}`,"DELETE")).status)})
@@ -264,9 +264,9 @@ test("membership loading and late responses stay bound to the selected bot on de
   await expect(sheet.getByLabel("Loading servers and channels")).toBeVisible()
   await page.screenshot({path:testInfo.outputPath("memberships-loading.png"),style})
   releaseFailure()
-  await expect(sheet.getByRole("alert")).toHaveText("Could not load servers and channels.")
+  await expect(sheet.getByRole("alert")).toContainText("Could not load servers and channels.")
   fail=false
-  await sheet.getByRole("button",{name:"Try again",exact:true}).click()
+  await sheet.getByRole("button",{name:"Retry",exact:true}).click()
   await expect(sheet.getByTestId(tid.botMembershipsServer(release.id))).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(sheet).toHaveCount(0)

@@ -1,10 +1,11 @@
 import { queryOptions } from "@tanstack/react-query"
 import { parseCommunityBotsProfileRead, CommunityBotProfileSummarySchema, type CommunityBotsProfileRead } from "@alook/shared"
-import type { DailyUsageMetric, ReasoningEffort } from "@alook/shared"
+import type { DailyUsageMetric, ReasoningEffort, StoredModelObservation } from "@alook/shared"
 import type { BotActivityDay, CommunityProfilePatch } from "./models/people"
 import { getCommunityDbRegistry } from "@/lib/community-db/collections"
 import { communityKeys } from "@/lib/query-keys"
 import { apiFetchProfiles } from "./account-cache-lifecycle"
+import { retireBotDirectoryScopes } from "./bot-directory-lifecycle"
 
 export type BotUsageDay = {
   day: string
@@ -30,6 +31,7 @@ export type BotSummary = {
   machineId: string
   runtime: string
   modelName: string | null
+  modelObservation?: StoredModelObservation
   reasoningEffort: ReasoningEffort | null
   runtimeConfigRevision: number
   isActive?: boolean
@@ -63,9 +65,9 @@ export type BotsResourceResponse = Partial<BotPlanSummary> & { bots: BotResource
 
 export type BotsResponse = BotPlanSummary & { bots: Array<BotSummary & CommunityBotsProfileRead["bots"][number]> }
 
-export function botProfilePatch(bot: Pick<BotSummary, "id" | "name" | "image" | "avatarVersion"> & { description?: string }): CommunityProfilePatch {
+export function botProfilePatch(bot: Pick<BotSummary, "id" | "name" | "image" | "avatarVersion"> & { description?: string; runtime?: string }): CommunityProfilePatch {
   const identity = CommunityBotProfileSummarySchema.parse(bot)
-  return { id: identity.id, identityAbout: { name: identity.name, kind: "bot", ...(identity.discriminator === undefined ? {} : { discriminator: identity.discriminator }), ...(identity.description === undefined ? {} : { aboutMe: identity.description }) }, avatar: { avatar: identity.image, avatarVersion: identity.avatarVersion }, ...(identity.presence === undefined ? {} : { presence: identity.presence }) }
+  return { id: identity.id, identityAbout: { name: identity.name, kind: "bot", ...(identity.discriminator === undefined ? {} : { discriminator: identity.discriminator }), ...(identity.description === undefined ? {} : { aboutMe: identity.description }) }, avatar: { avatar: identity.image, avatarVersion: identity.avatarVersion }, ...(bot.runtime === undefined ? {} : { card: { botRuntime: bot.runtime } }), ...(identity.presence === undefined ? {} : { presence: identity.presence }) }
 }
 
 function botsResource(data: BotsResponse): BotsResourceResponse {
@@ -76,7 +78,19 @@ export const botsOptions = () => queryOptions({
   queryKey: communityKeys.bots(),
   queryFn: async ({ client, signal }): Promise<BotsResourceResponse> => {
     const registry = getCommunityDbRegistry(client)
-    const data = await apiFetchProfiles<BotsResponse>("/api/community/bots", data => parseCommunityBotsProfileRead(data, registry!.accountId!).bots.map(bot => { const patch = botProfilePatch(bot); return { ...patch, identityAbout: { ...patch.identityAbout, ownerUserId: bot.ownerUserId } } }), { signal }, registry)
+    const previous = client.getQueryData<BotsResourceResponse>(communityKeys.bots())?.bots ?? []
+    const data = await apiFetchProfiles<BotsResponse>("/api/community/bots", data => {
+      const runtimeById = new Map(data.bots.map(bot => [bot.id, bot.runtime]))
+      return parseCommunityBotsProfileRead(data, registry!.accountId!).bots.map(bot => {
+        const patch = botProfilePatch({ ...bot, runtime: runtimeById.get(bot.id) })
+        return { ...patch, identityAbout: { ...patch.identityAbout, ownerUserId: bot.ownerUserId } }
+      })
+    }, { signal }, registry)
+    if (registry) {
+      const present = new Set(data.bots.map(bot => bot.id))
+      await retireBotDirectoryScopes(registry, previous.filter(bot => !present.has(bot.id)).map(bot => ({ kind: "bot", id: bot.id })))
+        .catch(error => console.error("Bot directory retirement failed", error))
+    }
     return { ...botsResource(data), source: "network" }
   },
   staleTime: query => query.state.data?.observed === false ? 0 : 5_000,

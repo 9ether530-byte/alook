@@ -55,6 +55,7 @@ export function ThreadChannelSurface({
   threadOpenerHandoff,
   canRenameThread,
   onNavigateParent,
+  onLeaveChannel,
   notificationLevel,
   onSetNotificationLevel,
   composerMembers,
@@ -86,6 +87,7 @@ export function ThreadChannelSurface({
   threadOpenerHandoff?: ThreadOpenerReadHandoff | null
   canRenameThread: boolean
   onNavigateParent: () => void
+  onLeaveChannel?: () => Promise<void>
   notificationLevel: ChannelNotifLevel
   onSetNotificationLevel: (level: ChannelNotifLevel) => void
   composerMembers: ComponentProps<typeof Composer>["members"]
@@ -221,6 +223,7 @@ export function ThreadChannelSurface({
               mobileBackDisplay="always"
               tools={{ threads: false }}
               onRename={parentChannelId && !compactActions ? rename : undefined}
+              onLeave={!compactActions && onLeaveChannel ? async () => { await onLeaveChannel(); onNavigateParent() } : undefined}
               compactActions={compactActions}
               endActions={splitActions ? (
                 <ThreadPanelActions
@@ -245,6 +248,7 @@ export function ThreadChannelSurface({
                   onOpenContextId={controller.openContextId}
                   key={channelId}
                   channel={displayName}
+                  kind="thread"
                   messages={controller.feed.messages}
                   loading={controller.feed.isLoading}
                   initialLoadError={controller.feed.initialLoadError}
@@ -334,8 +338,14 @@ export function ThreadChannelSurface({
               {...memberPanelProps}
               pinned={controller.feed.pinned}
               pinnedLoading={controller.feed.pinnedLoading}
+              pinnedKnown={controller.feed.pinnedKnown}
+              pinnedError={controller.feed.pinnedError}
+              onRetryPinned={controller.feed.retryPinned}
               threads={controller.feed.threads}
               threadsLoading={controller.feed.threadsLoading}
+              threadsKnown={controller.feed.threadsKnown}
+              threadsError={controller.feed.threadsError}
+              onRetryThreads={controller.feed.retryThreads}
               onOpenThread={onOpenChild}
               onJumpToMessage={controller.jumpToSeq}
               onOpenProfile={onOpenProfile}

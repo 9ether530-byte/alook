@@ -65,7 +65,7 @@ export async function prepareCase(actors: CaseActors, caseResources: CaseResourc
         hostname: `profile-preview-e2e-${Date.now()}`,
         platform: "darwin",
         arch: "arm64",
-        runtimeReport: [{ id: "codex", status: "healthy" }],
+        runtimeReport: [{ id: "codex-cli", status: "healthy" }],
       }),
     })
     expect(response.status).toBe(200)
@@ -90,7 +90,7 @@ export async function prepareCase(actors: CaseActors, caseResources: CaseResourc
       }
     }>("alice", "/api/community/bots", {
       method: "POST",
-      body: JSON.stringify({ name, machineId, runtime: "codex" }),
+      body: JSON.stringify({ name, machineId, runtime: "codex-cli" }),
     })
     createdBotIds.set(data.bot.id, caseResources.own(data.bot.id, async (botId) => {
       const response = await communityFixtureFetch(`${WEB_URL}/api/community/bots/${botId}`, { method: "DELETE", headers: headersFor("alice") })
@@ -281,14 +281,12 @@ export async function expectFooterGeometry(
     return {
       display: value.display,
       flexDirection: value.flexDirection,
-      justifyContent: value.justifyContent,
       alignItems: value.alignItems,
     }
   })
   expect(style).toEqual({
     display: "flex",
     flexDirection: "row",
-    justifyContent: "flex-end",
     alignItems: "center",
   })
   for (const actionRect of actionRects) {
@@ -297,6 +295,8 @@ export async function expectFooterGeometry(
   }
   for (let index = 1; index < actionRects.length; index++) {
     expect(actionRects[index]!.x).toBeGreaterThan(actionRects[index - 1]!.x)
+    expect(actionRects[index]!.x - (actionRects[index - 1]!.x + actionRects[index - 1]!.width))
+      .toBe(8)
     expect(actionRects[index]!.y).toBeCloseTo(actionRects[0]!.y, 0)
   }
   const finalAction = actionRects.at(-1)!

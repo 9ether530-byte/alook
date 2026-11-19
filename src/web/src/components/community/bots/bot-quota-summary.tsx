@@ -2,7 +2,7 @@
 
 import { useAtom, useCreateAtom } from "@tanstack/react-store";
 
-import { ChevronDown } from "lucide-react"
+import { ChevronDown } from "@/components/icons/lucide";
 import type { QuotaLimit } from "@alook/shared"
 import { ProviderLogo } from "@/components/provider-logo"
 import {
@@ -49,18 +49,9 @@ export function quotaBucketIdentity(limit: QuotaLimit): string {
   ].join("\u0000")
 }
 
-function decimalPlaces(value: number): number {
-  const source = String(value).toLowerCase()
-  if (source.includes("e-")) {
-    const [coefficient, exponent] = source.split("e-")
-    return Number(exponent) + (coefficient.split(".")[1]?.length ?? 0)
-  }
-  return source.split(".")[1]?.length ?? 0
-}
-
 export function remainingPercent(limit: QuotaLimit): number {
-  const precision = Math.min(12, decimalPlaces(limit.usedPercent))
-  return Number((100 - limit.usedPercent).toFixed(precision))
+  const rounded = Math.round(1000 - limit.usedPercent * 10) / 10
+  return Object.is(rounded, -0) ? 0 : rounded
 }
 
 function percentLabel(limit: QuotaLimit): string {
@@ -143,8 +134,12 @@ function quotaPlaceholder(entries: MachineBackendQuota[] | undefined): string | 
   return "Quota unavailable"
 }
 
+function isCodexBackend(backendId: string): boolean {
+  return backendId === "codex" || backendId === "codex-app" || backendId === "codex-cli"
+}
+
 function backendLabel(backendId: string): string {
-  if (backendId === "codex-app" || backendId === "codex-cli") return runtimeLabel(backendId)
+  if (isCodexBackend(backendId)) return runtimeLabel(backendId)
   return backendId
     .split(/[-_]/)
     .filter(Boolean)
@@ -190,7 +185,13 @@ export function MachineQuotaSummary({
   entries?: MachineBackendQuota[]
 }) {
   const [open, setOpen] = useAtom(useCreateAtom(false))
-  const placeholder = quotaPlaceholder(entries)
+  const hasExplicitCodex = entries?.some(({ scope }) => (
+    scope.agentBackendId === "codex-app" || scope.agentBackendId === "codex-cli"
+  ))
+  const summaryEntries = (entries ?? []).filter(({ scope }) => (
+    scope.agentBackendId !== "codex" || !hasExplicitCodex
+  ))
+  const placeholder = quotaPlaceholder(summaryEntries)
   if (!entries?.length) {
     return (
       <div
@@ -202,7 +203,7 @@ export function MachineQuotaSummary({
     )
   }
 
-  const backendSummaries = summarizeQuotaEntries(entries)
+  const backendSummaries = summarizeQuotaEntries(summaryEntries)
   const limitCount = entries.reduce((count, entry) => (
     entry.snapshot.status === "available" || entry.snapshot.status === "stale"
       ? count + entry.snapshot.limits.length
@@ -213,6 +214,7 @@ export function MachineQuotaSummary({
     return `${backendLabel(entry.scope.agentBackendId)} ${percentLabel(limit)}${stale}`
   }).join("; ")
   const sortedEntries = sortQuotaEntries(entries)
+  const disclosureIcon = <ChevronDown className="size-3 shrink-0 transition-transform group-data-popup-open:rotate-180" />
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -221,20 +223,27 @@ export function MachineQuotaSummary({
           <button
             type="button"
             aria-expanded={open}
-            aria-label={placeholder ? `Quota details: ${placeholder}` : `Quota details: ${summary}. ${limitCount} ${limitCount === 1 ? "limit" : "limits"}`}
+            aria-label={placeholder ? `Quota details: ${summaryEntries.map((entry) => backendLabel(entry.scope.agentBackendId)).join(", ")}. ${placeholder}` : `Quota details: ${summary}. ${limitCount} ${limitCount === 1 ? "limit" : "limits"}`}
             data-testid={tid.machineQuota(machineId)}
             className="group flex min-h-11 max-w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md py-2 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-7 sm:py-1"
           >
             {placeholder ? (
               <>
-                {entries.map((entry) => (
-                  <ProviderLogo
+                {summaryEntries.map((entry) => (
+                  <span
                     key={entry.scope.agentBackendId}
-                    provider={entry.scope.agentBackendId}
-                    className="size-3.5 shrink-0"
-                  />
+                    className="inline-flex shrink-0 items-center gap-1.5"
+                  >
+                    <ProviderLogo provider={entry.scope.agentBackendId} className="size-3.5 shrink-0" />
+                    {isCodexBackend(entry.scope.agentBackendId) && (
+                      <span>{backendLabel(entry.scope.agentBackendId)}</span>
+                    )}
+                  </span>
                 ))}
-                <span className="truncate">{placeholder}</span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="truncate">{placeholder}</span>
+                  {disclosureIcon}
+                </span>
               </>
             ) : (
               <>
@@ -257,21 +266,24 @@ export function MachineQuotaSummary({
                       provider={entry.scope.agentBackendId}
                       className="size-3.5 shrink-0"
                     />
+                    {isCodexBackend(entry.scope.agentBackendId) && (
+                      <span className="text-foreground/85">{backendLabel(entry.scope.agentBackendId)}</span>
+                    )}
                     <span className={stale ? "font-mono tabular-nums text-warning" : "font-mono tabular-nums text-foreground/85"}>
                       {remainingPercent(limit)}%
                     </span>
                     {stale && <span className="text-[10px] text-warning">stale</span>}
+                    {index === backendSummaries.length - 1 && disclosureIcon}
                   </span>
                 </span>
               )
             })}
-            <ChevronDown className="size-3 shrink-0 transition-transform group-data-popup-open:rotate-180" />
           </button>
         }
       />
       <PopoverContent
         align="start"
-        className="max-h-[min(32rem,calc(var(--app-overlay-safe-height)-2rem))] w-80 max-w-[calc(var(--app-safe-width)-1rem)] overflow-y-auto p-4 thin-scrollbar"
+        className="max-h-[min(32rem,calc(var(--app-overlay-safe-height)-2rem))] w-80 max-w-[calc(var(--app-safe-width)-1rem)] overflow-x-hidden overflow-y-auto p-4 thin-scrollbar"
         data-testid={tid.machineQuotaDetail(machineId)}
       >
         <div className="flex flex-col gap-4">

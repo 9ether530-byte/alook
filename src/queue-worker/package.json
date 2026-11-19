@@ -1,6 +1,6 @@
 {
   "name": "@alook/queue-worker",
-  "version": "0.1.69",
+  "version": "0.1.70",
   "private": true,
   "scripts": {
     "dev": "node ../../scripts/dev-with-wrangler-registry.mjs ../../.wrangler/registry wrangler dev --persist-to ../web/.wrangler/state",
@@ -15,12 +15,12 @@
     "@alook/shared": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "1.4.7",
-    "@cloudflare/workers-types": "^5.20261023.1",
+    "@cloudflare/vitest-plugin": "1.8.2",
+    "@cloudflare/workers-types": "^5.20261114.1",
     "@types/node": "^25.9.4",
     "knip": "^6.32.2",
     "typescript": "^6.0.3",
     "vitest": "5.1.0",
-    "wrangler": "4.152.0"
+    "wrangler": "4.162.0"
   }
 }

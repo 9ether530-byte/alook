@@ -2,7 +2,7 @@
 
 import { useAtom, useCreateAtom } from "@tanstack/react-store";
 
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, X } from "@/components/icons/lucide";
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -56,6 +56,7 @@ export function AgentHelpGallery({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        data-own-padding=""
         showCloseButton={false}
         className="flex w-full max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
       >

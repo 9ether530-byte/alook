@@ -6,7 +6,7 @@ import { Drawer as DialogPrimitive } from "@base-ui/react/drawer"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { AppEdgeFade, appBackdropClassName } from "./app-edge-fade"
-import { XIcon } from "lucide-react"
+import { XIcon } from "@/components/icons/lucide";
 import { SwipeRoot, SwipeViewport, SwipePopup, SwipeBackdrop, type SwipeRootProps } from "./swipe-container"
 
 function Dialog({ ...props }: SwipeRootProps) {
@@ -117,7 +117,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("flex min-w-0 flex-col gap-2", className)}
       {...props}
     />
   )

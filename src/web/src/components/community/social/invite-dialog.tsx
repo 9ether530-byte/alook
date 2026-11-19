@@ -3,7 +3,8 @@
 import { createStore, useSelector } from "@tanstack/react-store"
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo } from "react"
-import { Loader2, Search } from "lucide-react"
+import { Link2 } from "lucide-react";
+import { Loader2, Search } from "@/components/icons/lucide";
 import { toast } from "sonner"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -43,21 +44,29 @@ export function InviteFriendRow({
   onInvite: (friend: Friend) => void
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-accent/40">
+    <div
+      data-slot="people-picker-row"
+      className="flex items-center gap-3.5 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/40"
+    >
       <Avatar
         label={friend.avatar || friend.name}
         seed={friend.userId}
-        size={32}
+        size={38}
         presence={friend.status}
-        ringColor="var(--popover)"
+        ringColor="var(--tn-sticker-face, var(--popover))"
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{friend.name}</div>
-        {hasStatus(friend.statusEmoji, friend.statusText) && (
-          <div className="truncate text-xs text-muted-foreground">
-            {friend.statusEmoji} {friend.statusText}
-          </div>
-        )}
+        <div className="truncate text-[15px] font-semibold tracking-[-0.01em]">{friend.name}</div>
+        <div className="truncate text-xs text-muted-foreground">
+          {friend.discriminator ? (
+            <span className="font-mono">#{friend.discriminator} · </span>
+          ) : null}
+          {hasStatus(friend.statusEmoji, friend.statusText) ? (
+            `${friend.statusEmoji} ${friend.statusText}`
+          ) : (
+            <span className="capitalize">{friend.status}</span>
+          )}
+        </div>
       </div>
       <Button
         size="sm"
@@ -133,7 +142,7 @@ export function InviteDialog({
   const { accept: acceptDmMessage } = useDmMessageSender()
   const currentResolution = resolver.variables?.assert.signal === view.signal
   const selectedCode = currentResolution ? resolver.data?.token : undefined
-  const token = invitesQuery.invites.find((row) => row.code === selectedCode)?.code
+  const token = invitesQuery.observed ? invitesQuery.invites.find((row) => row.code === selectedCode)?.code : undefined
   const resolveError = currentResolution && resolver.error && !isAbortError(resolver.error) ? resolver.error.message : null
   const resolveInvite = resolver.mutate
   useEffect(() => {
@@ -150,6 +159,7 @@ export function InviteDialog({
     gcTime: 0,
     mutationFn: async ({ userId, token, author, assert }: SendIntent) => {
       assert()
+      if (!friendsQuery.isCurrentRead() || !invitesQuery.isCurrentRead()) throw new DOMException("Invite inputs changed", "AbortError")
       const { conversation } = await createOrGetDm.mutateAsync({ userId, assertActive: assert })
       assert()
       const receipt = acceptDmMessage({ dmId: conversation.id, content: inviteUrl(token), author, assertActive: assert })
@@ -168,6 +178,7 @@ export function InviteDialog({
     gcTime: 0,
     mutationFn: async ({ token, assert }: { token: string; assert: ReturnType<typeof view.capture> }) => {
       assert()
+      if (!invitesQuery.isCurrentRead()) throw new DOMException("Invite changed", "AbortError")
       await copyInviteLink(inviteUrl(token), (value) => { assert(); return navigator.clipboard.writeText(value) }, () => { assert(); void captureProductAnalytics({ event: "human_invitation_copied" }, assert) })
       assert()
       toast("Invite link copied")
@@ -190,35 +201,41 @@ export function InviteDialog({
     query,
   })
   const inviteFriend = (friend: Friend) => {
-    if (!token || !friend.userId || ui.get().invitedUserIds.has(friend.userId)) return
+    if (!token || !friendsQuery.isCurrentRead() || !invitesQuery.isCurrentRead() || !friend.userId || !friendsQuery.friends.some(row => row.userId === friend.userId) || ui.get().invitedUserIds.has(friend.userId)) return
     const assert = view.capture()
     const pending = client.getMutationCache().findAll({ mutationKey: sendKey, status: "pending" })
     if (pending.some((mutation) => { const intent = mutation.state.variables as SendIntent | undefined; return intent && intent.userId === friend.userId && intent.assert.signal === assert.signal })) return
     sender.mutate({ userId: friend.userId, token, author: { id: currentUser.id, name: currentUser.name, avatar: currentUser.avatar }, assert })
   }
-  const copyLink = () => { if (token && !copier.isPending) copier.mutate({ token, assert: view.capture() }) }
+  const copyLink = () => { if (token && invitesQuery.isCurrentRead() && !copier.isPending) copier.mutate({ token, assert: view.capture() }) }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-96 max-h-[min(80vh,calc(100%-2rem))] w-full flex-col gap-0 p-0 sm:max-w-md">
-        <PeoplePickerHeader title={`Invite friends to ${serverName}`} />
+      <DialogContent
+        data-own-padding=""
+        className="flex h-[max(75%,min(32rem,calc(100%-2rem)))] max-h-[calc(100%-2rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-120"
+      >
+        <PeoplePickerHeader
+          title={`Invite friends to ${serverName}`}
+          subtitle="Send a direct invite or share a link below."
+        />
 
-        <div className="px-4 pt-3">
+        <div className="px-5 pt-3 pb-2">
           <label className="relative block">
             <Search
               aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search for friends"
-              className="pl-9"
+              className="h-10 rounded-xl pl-9.5 text-sm"
             />
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto thin-scrollbar px-2 py-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto thin-scrollbar px-2 py-1.5">
           <PeoplePickerBody
             state={pickerState}
             loading={(
@@ -228,39 +245,46 @@ export function InviteDialog({
             )}
             errorMessage="Couldn't load friends."
             emptyMessage={friendsQuery.totalFriends === 0 ? "You don't have any friends to invite yet." : "No friends to invite — everyone you know is already here."}
-            retrying={friendsQuery.data === undefined && friendsQuery.isFetching}
+            retrying={friendsQuery.isFetching}
+            refreshFailed={friendsQuery.data !== undefined && friendsQuery.isError}
             onRetry={() => { void friendsQuery.refetch() }}
           >
-            {eligibleFriends.map((f) => {
-              const invited = f.userId ? invitedUserIds.has(f.userId) : false
-              const inviting = f.userId ? invitingUserIds.has(f.userId) : false
-              return (
-                <InviteFriendRow
-                  key={f.id}
-                  friend={f}
-                  tokenReady={Boolean(token)}
-                  inviting={inviting}
-                  invited={invited}
-                  onInvite={(candidate) => void inviteFriend(candidate)}
-                />
-              )
-            })}
+            <div className="flex flex-col gap-0.5">
+              {eligibleFriends.map((f) => {
+                const invited = f.userId ? invitedUserIds.has(f.userId) : false
+                const inviting = f.userId ? invitingUserIds.has(f.userId) : false
+                return (
+                  <InviteFriendRow
+                    key={f.id}
+                    friend={f}
+                    tokenReady={Boolean(token) && friendsQuery.observed}
+                    inviting={inviting}
+                    invited={invited}
+                    onInvite={(candidate) => void inviteFriend(candidate)}
+                  />
+                )
+              })}
+            </div>
           </PeoplePickerBody>
         </div>
 
-        <footer className="border-t border-border/50 px-4 py-3">
-          <div className="text-xs font-medium text-muted-foreground">
-            Or, send a server invite link to a friend
+        <footer
+          data-slot="invite-link-well"
+          className="mx-5 mt-2 mb-5 rounded-2xl px-4 py-3.5"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            <Link2 aria-hidden className="size-3.5 shrink-0" />
+            <span>Or, send a server invite link to a friend</span>
           </div>
           {resolveError ? (
             <p className="mt-2 text-xs text-destructive">{resolveError}</p>
           ) : (
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-2.5 flex items-center gap-2">
               <Input
                 readOnly
                 value={token ? inviteUrl(token) : ""}
                 placeholder={token ? "" : "Loading…"}
-                className="font-mono text-xs"
+                className="h-9 font-mono text-xs"
               />
               <Button size="sm" onClick={copyLink} disabled={!token}>
                 Copy

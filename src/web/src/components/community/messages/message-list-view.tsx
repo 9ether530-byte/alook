@@ -39,7 +39,6 @@ export function renderMessageListView(
           scrollCount={controller.pillCount}
           scrollMode={controller.pillMode}
           onScroll={controller.pillOnClick}
-          scrollPending={controller.pillPending}
           scrollError={controller.pillError}
           newVisible={controller.newJumpVisible}
           newPending={controller.newJumpPending}
@@ -68,7 +67,7 @@ export function renderMessageListView(
           data-pagination-enabled={controller.paginationEnabled ? "true" : "false"}
           aria-busy={showSkeleton}
           tabIndex={showSkeleton ? 0 : undefined}
-          className="relative z-10 h-full overflow-x-clip overflow-y-auto thin-scrollbar"
+          className={`relative z-10 h-full overflow-x-clip overflow-y-auto thin-scrollbar ${capsuleHeight > 0 ? "scroll-fade-b" : "supports-[animation-timeline:scroll()]:scroll-fade-b"}`}
         >
           <div
             data-message-list-content
@@ -125,7 +124,7 @@ export function MessageListSkeleton({ variant = "channel", capsuleHeight = 0 }: 
           data-testid={tid.messageScroller}
           data-composer-occlusion={capsuleHeight}
           data-pagination-enabled="false"
-          className="relative z-10 h-full overflow-x-clip overflow-y-auto thin-scrollbar"
+          className={`relative z-10 h-full overflow-x-clip overflow-y-auto thin-scrollbar ${capsuleHeight > 0 ? "scroll-fade-b" : "supports-[animation-timeline:scroll()]:scroll-fade-b"}`}
         >
           <div
             data-message-list-content

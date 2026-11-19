@@ -23,8 +23,6 @@
     "dev:ws": "pnpm --filter @alook/ws-do dev",
     "dev:queue-worker": "pnpm --filter @alook/queue-worker dev",
     "dev:app": "node scripts/dev-app.mjs",
-    "dev:meeting": "node scripts/dev-meeting.mjs",
-    "dev:send": "node -e \"const c=require('crypto');const a=process.argv.slice(1);const[f,t,s='Test',b='Hello from dev']=a;if(!f||!t){console.error('Usage: pnpm dev:send <from> <to> [subject] [body]');process.exit(1)}const raw=['From: '+f,'To: '+t,'Subject: '+s,'Message-ID: <'+c.randomUUID()+'@dev.local>','Date: '+new Date().toUTCString(),'MIME-Version: 1.0','Content-Type: text/plain; charset=utf-8','',b].join('\\r\\n');fetch('http://localhost:8787/cdn-cgi/handler/email?from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t),{method:'POST',headers:{'Content-Type':'application/json'},body:raw}).then(r=>{if(r.ok)console.log('Email delivered to worker');else return r.text().then(t=>{throw new Error(t)})}).catch(e=>console.error('Email worker not running?',e.message))\"",
     "test:shared": "pnpm --filter @alook/shared test",
     "test:daemon": "pnpm --filter @alook/daemon test",
     "test:web": "pnpm --filter @alook/web test",
@@ -49,7 +47,8 @@
     "app-store:creative": "node src/web/app-store-capture/creative/capture.mjs",
     "prepare": "simple-git-hooks",
     "check": "node scripts/ci/check-local.mjs",
-    "check:full": "node scripts/ci/check-local.mjs --full"
+    "check:full": "node scripts/ci/check-local.mjs --full",
+    "check:db-queries": "node scripts/db-query-check/run.mjs"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm check"
@@ -59,10 +58,10 @@
     "badge-maker": "6.0.0",
     "sharp": "^0.35.5",
     "simple-git-hooks": "^2.14.0",
-    "turbo": "^2.11.10",
+    "turbo": "^2.11.11",
     "typescript": "^6.0.3",
     "vitest": "5.1.0",
-    "wrangler": "4.152.0"
+    "wrangler": "4.162.0"
   },
   "pnpm": {
     "patchedDependencies": {

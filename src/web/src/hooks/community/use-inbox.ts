@@ -2,7 +2,6 @@
 import { communityRequestOptions } from "@/lib/community/account-cache-lifecycle"
 import { useMemo } from "react"
 import {
-keepPreviousData,
 useQuery,
 useMutationState,
 useQueryClient,
@@ -35,6 +34,7 @@ useCanonicalServersById,
 useDmProjection,
 } from "@/lib/community-db/projections"
 import {
+assertCommunityLiveSnapshotTokenCurrent,
 captureCommunityLiveSnapshotToken,
 publishCommunityResourceBundle,
 } from "@/lib/community-db/sync"
@@ -296,12 +296,13 @@ const inboxMarkedQueryFn = (queryClient: QueryClient) =>
 export function useInboxMarked(enabled: boolean): UseQueryResult<MarkedWindowResponse> & {
   marked: Marked[]
   canonicalPending: boolean
+  isDisplayReady: boolean
+  isInitialError: boolean
 } {
   const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: communityKeys.inboxMarked(),
     queryFn: inboxMarkedQueryFn(queryClient),
-    placeholderData: keepPreviousData,
     enabled,
   })
   const messageIds = useMemo(() => query.data?.marked.map((row) => row.m.id) ?? [], [query.data?.marked])
@@ -310,24 +311,45 @@ export function useInboxMarked(enabled: boolean): UseQueryResult<MarkedWindowRes
   const registry = useOptionalCommunityDbRegistry()
   const retiringServers = useMutationState({ filters: { mutationKey: communityServerRetirementKey, status: "pending" }, select: mutation => communityServerRetirementId(mutation, registry) })
   const markedAccess = useCommunityWsStore((state) => state)
-  const marked = useMemo(() => {
+  const eligible = useMemo(() => {
     const source = query.data?.marked ?? (EMPTY_MARKED as Marked[])
-    return source.flatMap((marked) => {
-      if (pendingMarks.filter((command) => command.messageId === marked.m.id).at(-1)?.marked === false) return []
-      if (!communityScopeAllowsAccess(markedAccess, marked) || marked.serverId && retiringServers.includes(marked.serverId)) return []
+    return source.filter(marked => pendingMarks.filter((command) => command.messageId === marked.m.id).at(-1)?.marked !== false
+      && communityScopeAllowsAccess(markedAccess, marked) && !(marked.serverId && retiringServers.includes(marked.serverId)))
+  }, [query.data?.marked, markedAccess, pendingMarks, retiringServers])
+  const marked = useMemo(() => {
+    return eligible.flatMap((marked) => {
       const message = materializeCanonicalMessage(marked.m, canonicalMessages)
       return message ? [{ ...marked, m: message }] : []
     })
-  }, [canonicalMessages, query.data?.marked, markedAccess, pendingMarks, retiringServers])
-  return { ...query, marked, canonicalPending: enabled && !!query.data && !query.isError && canonicalMessages === undefined }
+  }, [canonicalMessages, eligible])
+  const isDisplayReady = query.data !== undefined && marked.length === eligible.length
+  return { ...query, marked, isDisplayReady, isInitialError: query.isError && !isDisplayReady,
+    canonicalPending: enabled && !!query.data && !query.isError && !isDisplayReady }
 }
 
 export type MessageMarkedResponse = { marked: boolean }
 
-const messageMarkedQueryFn = (messageId: string) => ({ client, signal }: QueryFunctionContext) =>
-  apiFetch<MessageMarkedResponse & { stale?: boolean }>(
-    `/api/community/messages/${messageId}/marks`, communityRequestOptions(client, captureCommunityLiveSnapshotToken(client), signal),
-  ).then(throwIfStale)
+const messageMarkedQueryFn = (messageId: string) => async ({ client, signal }: QueryFunctionContext) => {
+  const original = captureCommunityLiveSnapshotToken(client), key = communityKeys.messageMarked(messageId)
+  if (!original.registry) throw new DOMException("Missing personal Marked owner", "AbortError")
+  const query = client.getQueryCache().find({ queryKey: key, exact: true }), baseline = query?.state.dataUpdateCount
+  const auxiliaryReadEpoch = await original.registry!.captureAuxiliaryReadEpoch()
+  const assert = () => {
+    assertCommunityLiveSnapshotTokenCurrent(client, original, signal)
+    if (query && (client.getQueryCache().find({ queryKey: key, exact: true }) !== query || query.state.dataUpdateCount !== baseline)) throw new DOMException("Retired personal Marked read", "AbortError")
+  }
+  assert()
+  const data = throwIfStale(await apiFetch<MessageMarkedResponse & { stale?: boolean }>(
+    `/api/community/messages/${messageId}/marks`, communityRequestOptions(client, original, signal, assert)))
+  assert()
+  if (client.getMutationCache().findAll({ mutationKey: ["community", "mark-command"], status: "pending", predicate: mutation => (mutation.state.variables as { messageId: string }).messageId === messageId }).length)
+    throw new DOMException("Personal Marked command is pending", "AbortError")
+  if (typeof data.marked !== "boolean") throw new Error("Invalid personal Marked response")
+  const message = original.registry.collections.messages.get(messageId)
+  const channel = message ? original.registry.collections.channels.get(message.channelId) : undefined
+  const scopeRef = message ? { channelId: message.channelId, ...(channel ? { serverId: channel.serverId, parentChannelId: channel.parentChannelId } : {}) } : undefined
+  return { marked: data.marked, ...(scopeRef ? { scopeRef } : {}), observed: true, ...(auxiliaryReadEpoch ? { auxiliaryReadEpoch } : {}) }
+}
 
 export function useMessageMarked(
   messageId: string,

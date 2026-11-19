@@ -18,7 +18,6 @@ export const pageRoutes = [
   "/contact",
   "/demo",
   "/download",
-  "/guides",
   "/landing-legacy",
   "/onboarding-preview",
   "/pricing",
@@ -30,6 +29,8 @@ export const pageRoutes = [
   "/terms",
   "/tutorials",
   "/tutorials/[slug]",
+  "/usecases",
+  "/usecases/[slug]",
 ] as const
 
 export const apiRoutes = [
@@ -52,6 +53,7 @@ export const apiRoutes = [
   "/api/community/automation/servers/[id]/members",
   "/api/community/automation/machines/[id]/discover-models",
   "/api/community/automation/messages",
+  "/api/community/automation/onboard-setup",
   "/api/community/automation/access-codes",
   "/api/community/automation/access-codes/[codeId]",
   "/api/community/automation/expire",
@@ -175,7 +177,6 @@ export const apiRoutes = [
   "/api/community/users/search",
   "/api/daemon/latest-version",
   "/api/desktop/update/[target]/[arch]/[current_version]",
-  "/api/email/notify",
   "/api/health",
   "/api/internal/account-maintenance",
   "/api/pricing",

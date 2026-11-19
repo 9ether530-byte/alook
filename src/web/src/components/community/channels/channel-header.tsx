@@ -3,13 +3,14 @@
 import { useAtom, useCreateAtom } from "@tanstack/react-store";
 import { useEffect, useRef, type ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
-import { Bell, BellOff, Pin, Users, MessagesSquare, ChevronLeft, Check, Pencil, MoreHorizontal, RotateCcw } from "lucide-react"
+import { Bell, BellOff, Pin, Users, MessagesSquare, ChevronLeft, Check, Pencil, MoreHorizontal, RotateCcw, LogOut } from "@/components/icons/lucide";
 import { NOTIF_LEVELS, USE_SERVER_DEFAULT, type NotifLevel } from "@alook/shared"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { avatarInitial } from "@/lib/community/avatar"
 import { Input } from "@/components/ui/input"
 import { onEnterSubmit } from "@/lib/ime"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { CreateDialogShell } from "../settings/create-dialog-shell"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EntityIcon } from "../entity-icon"
@@ -21,6 +22,7 @@ import type { EntityKind } from "@/lib/community/models/navigation"
 import { tid } from "@/lib/community/testids"
 import { MessageHeader, MessageHeaderMobileBack, MessageHeaderTitlePlaceholder, type MessageHeaderTitleState } from "./message-header"
 import { ThreadPanelActionsFrame } from "./thread-panel-actions"
+import { useConversationActivity } from "@/contexts/view-activity"
 
 const CHANNEL_OVERFLOW_GAP_CLASS_NAME = "ml-0.5"
 
@@ -85,7 +87,7 @@ export type ChannelNotifLevel = typeof USE_SERVER_DEFAULT | NotifLevel
 export function ChannelHeader({
   channel, rightPanel, onToggle, notifLevel, onSetNotifLevel,
   kind = "text", server, mobileBack, mobileBackDisplay = "viewport", onBack, tools,
-  onRename, endActions, compactActions, titleState = "ready", onRetryTitle, retryingTitle,
+  onRename, onLeave, endActions, compactActions, titleState = "ready", onRetryTitle, retryingTitle,
 }: {
   channel: string
   titleState?: MessageHeaderTitleState
@@ -97,6 +99,7 @@ export function ChannelHeader({
   notifLevel?: ChannelNotifLevel
   onSetNotifLevel?: (l: ChannelNotifLevel) => void
   onRename?: (name: string) => void | Promise<void>
+  onLeave?: () => void | Promise<void>
   server?: { id: string; name: string; icon: string | null }
   mobileBack?: () => void
   mobileBackDisplay?: "viewport" | "always"
@@ -155,14 +158,15 @@ export function ChannelHeader({
           {tools?.members !== false && tool("members", Users, "Member list")}
           <span className="mx-1 h-5 w-px bg-border/60" aria-hidden />
           <ChannelNotifDropdown level={notifLevel ?? USE_SERVER_DEFAULT} onSetLevel={onSetNotifLevel} />
-          {(tools?.threads !== false || tools?.pinned !== false) && (
-            <ChannelOverflowMenu
-              rightPanel={rightPanel}
-              onToggle={onToggle}
-              showThreads={tools?.threads !== false}
-              showPinned={tools?.pinned !== false}
-            />
-          )}
+          <ChannelOverflowMenu
+            channel={channel}
+            kind={kind}
+            rightPanel={rightPanel}
+            onToggle={onToggle}
+            showThreads={tools?.threads !== false}
+            showPinned={tools?.pinned !== false}
+            onLeave={onLeave}
+          />
         </span>
       )}
       {endActions}
@@ -178,45 +182,99 @@ export function ChannelHeader({
 }
 
 function ChannelOverflowMenu({
-  rightPanel, onToggle, showThreads, showPinned,
+  channel, kind, rightPanel, onToggle, showThreads, showPinned, onLeave,
 }: {
+  channel: string
+  kind: EntityKind
   rightPanel: RightPanel
   onToggle: (k: Exclude<RightPanel, null>) => void
   showThreads: boolean
   showPinned: boolean
+  onLeave?: () => void | Promise<void>
 }) {
+  const [confirmTarget, setConfirmTarget] = useAtom(useCreateAtom<string | null>(null))
+  const [leaving, setLeaving] = useAtom(useCreateAtom(false))
+  const leavingRef = useRef(false)
+  const active = useConversationActivity()
+  const confirmOpen = active && confirmTarget === channel
+  const showMenu = showThreads || showPinned || Boolean(onLeave)
   const activeInside = (rightPanel === "threads" && showThreads) || (rightPanel === "pinned" && showPinned)
+  useEffect(() => { setConfirmTarget(null) }, [active, channel, setConfirmTarget])
+
+  const confirmLeave = async () => {
+    if (!active || !onLeave || leavingRef.current) return
+    leavingRef.current = true
+    setLeaving(true)
+    try {
+      await onLeave()
+      setConfirmTarget(null)
+    } catch {
+      // Caller surfaces toastApiError; keep dialog open so user can retry or cancel.
+    } finally {
+      leavingRef.current = false
+      setLeaving(false)
+    }
+  }
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="More channel options"
-            className={`${CHANNEL_OVERFLOW_GAP_CLASS_NAME} text-muted-foreground hover:text-foreground ${activeInside ? "bg-accent text-foreground" : ""}`}
-          />
-        }
-      >
-        <MoreHorizontal className="size-4" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        {showThreads && (
-          <DropdownMenuItem onClick={() => onToggle("threads")}>
-            <MessagesSquare className="size-4" />
-            <span className="flex-1">Threads</span>
-            {rightPanel === "threads" && <Check className="size-4 shrink-0 text-primary" />}
-          </DropdownMenuItem>
-        )}
-        {showPinned && (
-          <DropdownMenuItem onClick={() => onToggle("pinned")}>
-            <Pin className="size-4" />
-            <span className="flex-1">Pinned messages</span>
-            {rightPanel === "pinned" && <Check className="size-4 shrink-0 text-primary" />}
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      {showMenu && <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="More channel options"
+              className={`${CHANNEL_OVERFLOW_GAP_CLASS_NAME} text-muted-foreground hover:text-foreground ${activeInside ? "bg-accent text-foreground" : ""}`}
+            />
+          }
+        >
+          <MoreHorizontal className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          {showThreads && (
+            <DropdownMenuItem onClick={() => onToggle("threads")}>
+              <MessagesSquare className="size-4" />
+              <span className="flex-1">Threads</span>
+              {rightPanel === "threads" && <Check className="size-4 shrink-0 text-primary" />}
+            </DropdownMenuItem>
+          )}
+          {showPinned && (
+            <DropdownMenuItem onClick={() => onToggle("pinned")}>
+              <Pin className="size-4" />
+              <span className="flex-1">Pinned messages</span>
+              {rightPanel === "pinned" && <Check className="size-4 shrink-0 text-primary" />}
+            </DropdownMenuItem>
+          )}
+          {onLeave && (showThreads || showPinned) && <DropdownMenuSeparator />}
+          {onLeave && (
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => setConfirmTarget(channel)}
+            >
+              <LogOut className="size-4" />
+              <span className="flex-1">Leave</span>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>}
+      {confirmOpen && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => { if (!open && !leaving) setConfirmTarget(null) }}
+          title={`Leave /${channel}?`}
+          description={kind === "thread"
+            ? "You'll stop receiving notifications for new replies."
+            : "You'll lose access until you're added back."}
+          confirmLabel="Leave"
+          loadingLabel="Leaving…"
+          loading={leaving}
+          confirmDisabled={!onLeave}
+          confirmVariant="destructive"
+          onConfirm={() => { void confirmLeave() }}
+        />
+      )}
+    </>
   )
 }
 
@@ -314,32 +372,34 @@ function HeaderRename({ label, onRename, className = "" }: {
         <Pencil className="size-3.5" />
       </Button>
       {open && (
-        <Dialog open onOpenChange={(o) => { if (!o) setOpen(false) }}>
-          <DialogContent className="w-105 max-w-[calc(var(--app-safe-width)-2rem)] p-0">
-            <DialogHeader className="border-b border-border px-4 py-4">
-              <DialogTitle>Rename Thread</DialogTitle>
-            </DialogHeader>
-            <div className="px-4 pb-5 pt-4">
-              <label className="block">
-                <div className="mb-2 text-xs font-semibold text-muted-foreground">Name</div>
-                <Input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(event) => onEnterSubmit(save)(event)}
-                  placeholder="thread-name"
-                  aria-label="Thread name"
-                  className="h-10"
-                  autoFocus
-                />
-                <SlugHint {...draftPreview} />
-              </label>
-            </div>
-            <DialogFooter className="mx-0 mb-0 flex-row items-center justify-end gap-2 rounded-b-xl border-t border-border bg-card px-4 py-3">
+        <CreateDialogShell
+          open
+          onClose={() => { if (!saving) setOpen(false) }}
+          title="Rename Thread"
+          mutedTitle={false}
+          footer={(
+            <>
               <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
               <Button size="sm" onClick={() => void save()} disabled={!validDraft || saving}>Save</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </>
+          )}
+        >
+          <div className="px-5 pb-4 pt-2">
+            <label className="block">
+              <div className="mb-2 text-xs font-semibold text-muted-foreground">Name</div>
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(event) => onEnterSubmit(save)(event)}
+                placeholder="thread-name"
+                aria-label="Thread name"
+                className="h-10"
+                autoFocus
+              />
+              <SlugHint {...draftPreview} />
+            </label>
+          </div>
+        </CreateDialogShell>
       )}
     </>
   )

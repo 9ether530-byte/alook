@@ -3,7 +3,8 @@
 import { useAtom, useCreateAtom } from "@tanstack/react-store";
 import { useRef, type MouseEvent } from "react"
 import { flushSync } from "react-dom"
-import { CircleCheck, Download, FileAudio, FileVideo, LoaderCircle, Pause, Play, RefreshCw, Square } from "lucide-react"
+import { FileAudio, FileVideo } from "lucide-react";
+import { CircleCheck, Download, LoaderCircle, Pause, Play, RefreshCw, Square } from "@/components/icons/lucide";
 import { Button } from "@/components/ui/button"
 import { tid } from "@/lib/community/testids"
 import type { FileAttachment } from "@/lib/community/models/message"
@@ -32,7 +33,9 @@ export function MediaAttachmentBlock({
   const playbackActiveRef = useRef(false)
   const MediaIcon = mediaKind === "video" ? FileVideo : FileAudio
   const attachmentDownload = useFileDownload(attachment)
-  const downloadStatusText = fileDownloadStatusText(attachmentDownload.state)
+  const downloadStatusText = attachmentDownload.state.status === "downloading" || attachmentDownload.state.status === "error"
+    ? fileDownloadStatusText(attachmentDownload.state)
+    : null
   const DownloadIcon = attachmentDownload.state.status === "downloading"
     ? LoaderCircle
     : (attachmentDownload.state.status === "saved" || attachmentDownload.state.status === "started")

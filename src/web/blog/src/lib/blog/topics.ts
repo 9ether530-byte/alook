@@ -1,7 +1,6 @@
-import { isGuide } from "./guides";
 import type { BlogPost } from "./types";
 
-export type BlogTopicEntry = {
+type BlogTopicEntry = {
   slug: string;
   userJob: string;
 };
@@ -41,6 +40,7 @@ export const blogTopics = [
       "Coordinate coding agents across tools and repositories without duplicated work, lost decisions, or merge conflicts.",
     pillarSlug: "claude-code-and-codex-same-team",
     entries: [
+      { slug: "opencode-vs-claude-code", userJob: "Choose OpenCode or Claude Code by model choice, cost, memory and migration needs" },
       { slug: "cursor-vs-claude-code", userJob: "Choose Cursor or Claude Code by editing workflow, models, pricing and first-project needs" },
       { slug: "claude-code-vs-codex", userJob: "Choose Claude Code or Codex by patch review, permissions, runtime and plan usage" },
       { slug: "claude-code-codex-cursor-grok-which-to-choose", userJob: "Choose a coding or personal-agent harness for a concrete task using reported strengths and weaknesses" },
@@ -76,9 +76,6 @@ export const blogTopics = [
         slug: "multiple-ai-agents-edit-same-repository",
         userJob: "Run parallel agents on one repo without conflicts",
       },
-      { slug: "prevent-claude-code-codex-duplicating-work", userJob: "Prevent Claude Code and Codex from duplicating work" },
-      { slug: "prevent-codex-opencode-duplicating-work", userJob: "Prevent Codex and OpenCode from duplicating work" },
-      { slug: "prevent-claude-code-opencode-duplicating-work", userJob: "Prevent Claude Code and OpenCode from duplicating work" },
       {
         slug: "prevent-coding-agents-duplicating-work",
         userJob: "Stop agents from redoing each other's work",
@@ -136,12 +133,6 @@ export function getBlogTopicBySlug(slug: string): BlogTopic | undefined {
   );
 }
 
-export function getBlogTopicEntryBySlug(
-  slug: string
-): BlogTopicEntry | undefined {
-  return getBlogTopicBySlug(slug)?.entries.find((entry) => entry.slug === slug);
-}
-
 export function getPostsForTopic(
   topic: BlogTopic,
   posts: readonly BlogPost[]
@@ -151,41 +142,6 @@ export function getPostsForTopic(
     const post = postsBySlug.get(entry.slug);
     return post ? [post] : [];
   });
-}
-
-export function getRelatedPosts(
-  slug: string,
-  posts: readonly BlogPost[],
-  limit = 3
-): BlogPost[] {
-  posts = posts.filter((post) => !isGuide(post));
-  const topic = getBlogTopicBySlug(slug);
-  if (!topic || limit <= 0) return [];
-
-  const currentIndex = topic.entries.findIndex((entry) => entry.slug === slug);
-  const pillar = topic.entries.find((entry) => entry.slug === topic.pillarSlug);
-  const candidates = topic.entries
-    .filter((entry) => entry.slug !== slug && entry.slug !== topic.pillarSlug)
-    .sort((a, b) => {
-      if (slug === topic.pillarSlug) return 0;
-      const aIndex = topic.entries.indexOf(a);
-      const bIndex = topic.entries.indexOf(b);
-      return (
-        Math.abs(aIndex - currentIndex) - Math.abs(bIndex - currentIndex) ||
-        aIndex - bIndex
-      );
-    });
-
-  const orderedEntries =
-    slug === topic.pillarSlug || !pillar ? candidates : [pillar, ...candidates];
-  const postsBySlug = new Map(posts.map((post) => [post.slug, post]));
-
-  return orderedEntries
-    .flatMap((entry) => {
-      const post = postsBySlug.get(entry.slug);
-      return post ? [post] : [];
-    })
-    .slice(0, limit);
 }
 
 export function getNextTopicBridge(
@@ -198,6 +154,6 @@ export function getNextTopicBridge(
   if (topicIndex === -1) return undefined;
 
   const nextTopic = blogTopics[(topicIndex + 1) % blogTopics.length];
-  const pillar = posts.find((post) => !isGuide(post) && post.slug === nextTopic.pillarSlug);
+  const pillar = posts.find((post) => post.slug === nextTopic.pillarSlug);
   return pillar ? { topic: nextTopic, post: pillar } : undefined;
 }

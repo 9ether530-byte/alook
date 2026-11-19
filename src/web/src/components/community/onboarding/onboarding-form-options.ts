@@ -1,9 +1,5 @@
-import {
-  BriefcaseBusinessIcon,
-  Code2Icon,
-  HouseIcon,
-  RocketIcon,
-} from "lucide-react"
+import { BriefcaseBusinessIcon } from "lucide-react";
+import { Code2Icon, HouseIcon, RocketIcon } from "@/components/icons/lucide";
 
 import type { OnboardingSelectOption } from "./onboarding-select-dialog"
 
@@ -15,7 +11,7 @@ export const ONBOARDING_HARNESSES = [
   },
   {
     value: "codex-app",
-    label: "Codex",
+    label: "Codex App",
     provider: "codex-app",
   },
   { value: "codex-cli", label: "Codex CLI", provider: "codex-cli" },

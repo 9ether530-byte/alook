@@ -3,6 +3,7 @@ import { basename, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { stepGuides } from "../src/lib/step-guides";
+import { useCases } from "../src/lib/usecases";
 
 type AppPathsManifest = Record<string, string>
 type RoutesManifest = {
@@ -27,10 +28,11 @@ export function verifyZoneManifests(args: {
   blogPrerender: PrerenderManifest
   postSlugs: string[]
   guideSlugs?: string[]
+  useCaseSlugs?: string[]
 }): void {
   const mainRoutes = Object.keys(args.mainAppPaths)
   assert(
-    mainRoutes.every((route) => !route.startsWith("/blog") && !route.startsWith("/og/blog") && !route.startsWith("/guides/") && !route.startsWith("/tutorials/")),
+    mainRoutes.every((route) => !route.startsWith("/blog") && !route.startsWith("/og/blog") && !route.startsWith("/guides/") && !route.startsWith("/tutorials/") && !route.startsWith("/usecases")),
     "Main Next output still owns a Blog route",
   )
   assert(
@@ -43,9 +45,10 @@ export function verifyZoneManifests(args: {
   const blogRoutes = Object.keys(args.blogAppPaths)
   for (const required of [
     "/blog/(index)/page",
-    "/guides/page",
     "/tutorials/page",
     "/tutorials/[slug]/page",
+    "/usecases/page",
+    "/usecases/[slug]/page",
     "/blog/[slug]/page",
     "/blog/feed.xml/route",
     "/og/blog/[slug]/route",
@@ -55,7 +58,8 @@ export function verifyZoneManifests(args: {
   }
   assert(
     blogRoutes.every((route) => (
-      route === "/guides/page" || route === "/tutorials/page" || route === "/tutorials/[slug]/page" ||
+      route === "/tutorials/page" || route === "/tutorials/[slug]/page" ||
+      route === "/usecases/page" || route === "/usecases/[slug]/page" ||
       route.startsWith("/blog") ||
       route.startsWith("/og/blog") ||
       route.startsWith("/internal/blog-discovery") ||
@@ -73,6 +77,9 @@ export function verifyZoneManifests(args: {
   const prerendered = new Set(Object.keys(args.blogPrerender.routes))
   for (const slug of args.guideSlugs ?? []) {
     assert(prerendered.has(`/tutorials/${slug}`), `Blog output is missing step guide ${slug}`)
+  }
+  for (const slug of args.useCaseSlugs ?? []) {
+    assert(prerendered.has(`/usecases/${slug}`), `Blog output is missing use case ${slug}`)
   }
   for (const slug of args.postSlugs) {
     assert(prerendered.has(`/blog/${slug}`), `Blog output is missing published post ${slug}`)
@@ -107,6 +114,7 @@ export function verifyZoneOutput(webRoot: string): void {
     blogPrerender: readJson(join(blogNext, "prerender-manifest.json")),
     postSlugs,
     guideSlugs: stepGuides.map((guide) => guide.slug),
+    useCaseSlugs: useCases.map((useCase) => useCase.slug),
   })
 
   assert(!existsSync(join(webRoot, "public/blog")), "Main public tree still contains Blog assets")

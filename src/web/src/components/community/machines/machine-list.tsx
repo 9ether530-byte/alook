@@ -7,7 +7,7 @@ import { getCommunityRuntime, useCommunityRuntime } from "@/stores/community/run
 import { useCallback, useEffect, useRef, type ReactNode } from "react"
 import { useCommunityModuleLocation } from "@/contexts/community/module-route"
 import { toast } from "sonner"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft } from "@/components/icons/lucide";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query"
 import { useCommunityMutationOrigin } from "@/hooks/community/community-origin"
 import { useCommunityViewSource } from "@/hooks/community/use-community-view-source"
@@ -53,6 +53,7 @@ import {
 import { removeCommunityParam } from "@/lib/community/community-route"
 import { MachineCapacityUsage, MachineLimitDialog } from "./machine-capacity"
 import { GuideMeAvatarMotion } from "./guide-me-avatar-motion"
+import { HOME_TAB_COLUMN_CLASS } from "../home-tab-layout"
 
 const MACHINE_LIST_HEADING_CLASS =
   "flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between"
@@ -83,8 +84,10 @@ function MachineCardSkeleton() {
 function MachineListContent({ heading, cards }: { heading: ReactNode; cards: ReactNode }) {
   return (
     <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-6 thin-scrollbar">
-      {heading}
-      <div className="flex flex-col gap-3">{cards}</div>
+      <div data-slot="home-tab-column" className={`${HOME_TAB_COLUMN_CLASS} flex flex-col gap-6`}>
+        {heading}
+        <div className="flex flex-col gap-3">{cards}</div>
+      </div>
     </div>
   )
 }

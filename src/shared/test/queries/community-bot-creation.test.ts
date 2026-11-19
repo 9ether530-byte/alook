@@ -12,7 +12,7 @@ import { ensureNewSiblingBotFriendships } from "../../src/db/queries/community/f
 let sqlite: Sqlite.Database
 let db: Database
 let queryLog: { sql: string; params: unknown[] }[]
-const proposal = (name: string) => ({ name, machineId: "m1", backendId: "codex", model: "custom/model", reason: "Independent review" })
+const proposal = (name: string) => ({ name, machineId: "m1", backendId: "codex-cli", model: "custom/model", reason: "Independent review" })
 const count = () => (sqlite.prepare('SELECT count(*) AS n FROM user WHERE isBot=1').get() as { n: number }).n
 beforeEach(() => {
   sqlite = new Sqlite(":memory:")
@@ -25,13 +25,18 @@ beforeEach(() => {
   ;(db as any).batch = async (statements: any[]) => sqlite.transaction(() => statements.map((statement) => sqlite.prepare(statement.toSQL().sql).reader ? statement.all() : statement.run()))()
   sqlite.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,isBot,ownerUserId,discriminator) VALUES (?,?,?,?,?,?,?,?,?)').run("owner", "Owner", "owner@test.local", 1, "now", "now", 0, null, "0001")
   sqlite.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,isBot,ownerUserId,discriminator) VALUES (?,?,?,?,?,?,?,?,?)').run("requester", "Requester", "requester@test.local", 1, "now", "now", 1, "owner", "0002")
-  sqlite.prepare('INSERT INTO community_machine(id,user_id,display_name,hostname,platform,arch,available_runtimes,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run("m1", "owner", "Work Mac", "host", "darwin", "arm64", JSON.stringify([{ id: "codex", status: "healthy", reasoning: { updateMode: "live_next_turn", models: [{ id: "listed", supportedReasoningEfforts: [{ value: "high" }] }] } }]), "online", "now", "now")
-  sqlite.prepare('INSERT INTO community_bot_binding(user_id,machine_id,runtime,created_at) VALUES (?,?,?,?)').run("requester", "m1", "codex", "now")
+  sqlite.prepare('INSERT INTO community_machine(id,user_id,display_name,hostname,platform,arch,available_runtimes,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)').run("m1", "owner", "Work Mac", "host", "darwin", "arm64", JSON.stringify([{ id: "codex-cli", status: "healthy", reasoning: { updateMode: "live_next_turn", models: [{ id: "listed", supportedReasoningEfforts: [{ value: "high" }] }] } }]), "online", "now", "now")
+  sqlite.prepare('INSERT INTO community_bot_binding(user_id,machine_id,runtime,created_at) VALUES (?,?,?,?)').run("requester", "m1", "codex-cli", "now")
   sqlite.exec("UPDATE product_plan_entitlement SET value_json='10' WHERE entitlement_key='bots.max'")
 })
 afterEach(() => sqlite.close())
 
 describe("bot creation requests on real migrated SQLite", () => {
+  it("rejects a new automatic proposal without creating its approval card", async () => {
+    await expect(submitCreationRequest(db, "owner", "requester", { requestId: "retired", bots: [{ ...proposal("A"), backendId: "codex" }] })).rejects.toMatchObject({ code: "BACKEND_RETIRED" })
+    expect(await getCreationRequest(db, "retired", { requesterId: "requester" })).toBeNull()
+    expect(count()).toBe(1)
+  })
   it("matches migrated foreign keys and lookup indexes, and enforces card identity and valid state", async () => {
     const config = getTableConfig(communityBotCreationRequest)
     const declared = config.foreignKeys.map((key) => {
@@ -41,7 +46,7 @@ describe("bot creation requests on real migrated SQLite", () => {
     const migrated = (sqlite.pragma("foreign_key_list(community_bot_creation_request)") as typeof declared).map(({ from, table, to, on_delete }) => ({ from, table, to, on_delete })).sort((a, b) => a.from.localeCompare(b.from))
     expect(declared).toHaveLength(4)
     expect(migrated).toEqual(declared)
-    expect(config.indexes.map((index) => index.config.name).sort()).toEqual(["idx_bot_creation_owner", "idx_bot_creation_requester"])
+    expect(config.indexes.map((index) => index.config.name).sort()).toEqual(["idx_bot_creation_owner", "idx_bot_creation_requester", "idx_community_bot_creation_request_channel_id_lookup"])
     for (const index of config.indexes) {
       const columns = index.config.columns.map((column) => "name" in column ? column.name : undefined)
       expect(sqlite.pragma(`index_info(${index.config.name})`)).toEqual(columns.map((name, seqno) => expect.objectContaining({ name, seqno })))
@@ -76,7 +81,7 @@ describe("bot creation requests on real migrated SQLite", () => {
     for (let index = 1; index < 20; index++) {
       const id = `existing-${index}`
       sqlite.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,isBot,ownerUserId,discriminator) VALUES (?,?,?,?,?,?,?,?,?)').run(id, id, `${id}@test.local`, 1, "now", "now", 1, "owner", "0001")
-      sqlite.prepare('INSERT INTO community_bot_binding(user_id,machine_id,runtime,created_at) VALUES (?,?,?,?)').run(id, "m1", "codex", "now")
+      sqlite.prepare('INSERT INTO community_bot_binding(user_id,machine_id,runtime,created_at) VALUES (?,?,?,?)').run(id, "m1", "codex-cli", "now")
     }
     await submitCreationRequest(db, "owner", "requester", { requestId: "max", bots: Array.from({ length: 20 }, (_, index) => proposal(`New ${index}`)) })
     const result = await decideCreationRequest(db, "owner", "max", "approve")
@@ -100,7 +105,7 @@ describe("bot creation requests on real migrated SQLite", () => {
     sqlite.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,isBot,ownerUserId,discriminator) VALUES (?,?,?,?,?,?,?,?,?)').run("other-owner", "Other owner", "other-owner@test.local", 1, "now", "now", 0, null, "0001")
     sqlite.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,isBot,ownerUserId,discriminator,deletedAt) VALUES (?,?,?,?,?,?,?,?,?,?)').run("foreign", "Foreign", "foreign@test.local", 1, "now", "now", 1, "other-owner", "0001", null)
     sqlite.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,isBot,ownerUserId,discriminator,deletedAt) VALUES (?,?,?,?,?,?,?,?,?,?)').run("deleted", "Deleted", "deleted@test.local", 1, "now", "now", 1, "owner", "0001", "now")
-    for (const id of ["foreign", "deleted"]) sqlite.prepare('INSERT INTO community_bot_binding(user_id,machine_id,runtime,created_at) VALUES (?,?,?,?)').run(id, "m1", "codex", "now")
+    for (const id of ["foreign", "deleted"]) sqlite.prepare('INSERT INTO community_bot_binding(user_id,machine_id,runtime,created_at) VALUES (?,?,?,?)').run(id, "m1", "codex-cli", "now")
     const insert = sqlite.prepare('INSERT INTO community_friendship(id,requester_id,addressee_id,status,created_at,updated_at) VALUES (?,?,?,?,?,?)')
     insert.run("blocked", a, "requester", "blocked", "now", "now")
     insert.run("pending", "requester", b, "pending", "now", "now")

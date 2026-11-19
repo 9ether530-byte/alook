@@ -1,4 +1,7 @@
 import React from "react"
+import { QueryClient } from "@tanstack/react-query"
+import { CommunityTestProvider } from "@/test/community-owner-fixture"
+import { createCommunityDbRegistry } from "@/lib/community-db/collections"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { BillingSummary } from "@alook/shared"
 import { fireEvent, render } from "@/test/react-dom-harness"
@@ -25,13 +28,25 @@ const free: BillingSummary = {
   offers: [{ priceId: "price_a", plan: { id: "custom-tier", displayName: "Studio" }, botLimit: 10, machineLimit: 5, unitAmount: 2000, currency: "usd", interval: "month", intervalCount: 1 }],
 }
 function state(overrides: Partial<BillingController> = {}): BillingController {
-  return { data: free, isPending: false, isError: false, isFetching: false, isBusy: false, returnFrom: null, polling: false, actionError: null, checkout: vi.fn(), portal: vi.fn(), cancelChange: vi.fn(), isCancelingChange: false, refresh: vi.fn(), ...overrides } as unknown as BillingController
+  return { data: free, isCurrentRead: () => true, isPending: false, isError: false, isFetching: false, isBusy: false, returnFrom: null, polling: false, actionError: null, checkout: vi.fn(), portal: vi.fn(), cancelChange: vi.fn(), isCancelingChange: false, refresh: vi.fn(), ...overrides } as unknown as BillingController
 }
 function view(billing: BillingController) { return render(<BillingContent billing={billing} />) }
 
 beforeEach(() => { analytics.cta.mockReset() })
 
 describe("billing sheet", () => {
+  it("keeps historical prices visible after a refresh error while payment actions remain unavailable", () => {
+    const billing = state({ isError: true, isCurrentRead: () => false })
+    const ui = view(billing)
+    expect(ui.getByText(`${priceFormat.format(20)} USD / month`, { collapseWhitespace: false })).toBeInTheDocument()
+    expect(ui.getByRole("alert")).toHaveTextContent("Couldn't refresh your plan")
+    const choose = ui.getByRole("button", { name: "Choose Studio" })
+    expect(choose).toBeDisabled()
+    fireEvent.click(choose)
+    expect(billing.checkout).not.toHaveBeenCalled()
+    expect(billing.portal).not.toHaveBeenCalled()
+    expect(ui.getByRole("button", { name: "Refresh status" })).toBeEnabled()
+  })
   it("shows server offers without fixed plan IDs and sends only the selected price", () => {
     const billing = state()
     const ui = view(billing)
@@ -174,4 +189,18 @@ it("explains ownership limits without promising an upgrade", () => {
   expect(ui.getByRole("button", { name: "View plan" })).toBeInTheDocument()
   expect(ui.queryByText(/upgrade your plan/i)).toBeNull()
   expect(ui.getByRole("button", { name: "Got it" })).toBeInTheDocument()
+})
+
+it("binds a billing CTA to the community owner that handled the click", async () => {
+  const client = new QueryClient()
+  const registry = createCommunityDbRegistry(client, "billing-owner")
+  const studio = { ...free.offers[0]!, plan: { id: "studio", displayName: "Studio" } }
+  const billing = state({ data: { ...free, offers: [studio] } })
+  const ui = render(<CommunityTestProvider client={client} registry={registry}><BillingContent billing={billing} /></CommunityTestProvider>)
+  fireEvent.click(ui.getByRole("button", { name: "Choose Studio" }))
+  expect(analytics.cta).toHaveBeenCalledExactlyOnceWith({ plan_id: "studio", cta_action: "choose_plan", auth_state: "signed_in", current_plan: "free", entry_point: "billing_sheet" }, expect.any(Function))
+  const guard = analytics.cta.mock.calls[0][1]
+  expect(() => guard()).not.toThrow()
+  await registry.cleanup()
+  expect(() => guard()).toThrow()
 })

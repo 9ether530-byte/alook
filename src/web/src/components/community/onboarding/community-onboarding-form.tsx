@@ -16,7 +16,7 @@ import { finishCommunityOnboardingAgentSetup, switchCommunityOnboardingSetup, ad
 
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { X } from "lucide-react"
+import { X } from "@/components/icons/lucide";
 import { Dialog as SetupDialog } from "@base-ui/react/dialog"
 import { AppEdgeFade, appBackdropClassName } from "@/components/ui/app-edge-fade"
 import { StepSlide } from "@/components/ui/step-slide"
@@ -29,6 +29,7 @@ import {
   supportsAgentSetup,
 } from "./onboarding-form-options"
 import { beginOnboardingAnalytics } from "@/lib/product-analytics"
+import { captureAnalyticsOwner } from "@/lib/analytics-owner"
 import { initializeCommunityOnboarding } from "./initialize-community-onboarding"
 import { tid } from "@/lib/community/testids"
 import { useCurrentUser } from "@/contexts/community/current-user"
@@ -268,7 +269,7 @@ function CommunityOnboardingSteps() {
           const destination = `/c/channels/${initializationResult.serverId}/${initializationResult.publicChannelId}`
           const assert = source.capture()
           assert()
-          beginOnboardingAnalytics(currentUser.id, initializationResult.serverId)
+          beginOnboardingAnalytics(currentUser.id, initializationResult.serverId, captureAnalyticsOwner(communityRuntime.lifecycle))
           if (!communityRuntime.lifecycle.get().active) return
           try { assert() } catch { return }
           const navigate = communityRuntime.ui.get().uiHandlers.navigate

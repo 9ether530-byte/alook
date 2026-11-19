@@ -7,7 +7,8 @@ import { OfficialServerBadge } from "../official-server-badge"
 import { CommunityNavigationLink } from "../shell/community-navigation-link"
 import { channelHref } from "@/lib/community/community-route"
 import { Fragment, memo, useEffect, useRef, type ComponentProps, type MouseEvent } from "react"
-import { Settings, Users, Link2, Bell, ChevronDown, UserPlus } from "lucide-react"
+import { Link2 } from "lucide-react";
+import { Settings, Users, Bell, ChevronDown, UserPlus } from "@/components/icons/lucide";
 import { CommunityDndProvider, useCommunityDndScrolling } from "../community-dnd"
 import { ChannelDndScope, ChannelDropContainer, useChannelDragActive } from "./channel-dnd"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from "@/components/ui/context-menu"
@@ -29,6 +30,7 @@ import { tid } from "@/lib/community/testids"
 import type { ForumSidebarThread } from "@/hooks/community/use-forum-sidebar-threads"
 import { selectUnreadPresentation } from "@/hooks/community/unread-presentation"
 import { ChannelUnreadIndicator } from "./channel-unread-indicator"
+import { ForumPostCountsStatus } from "./forum-post-count"
 
 const FORUM_SIDEBAR_ROW_HEIGHT = 28
 
@@ -281,6 +283,7 @@ function ChannelSidebarContent({
           )}
         </header>
       )}
+      <ForumPostCountsStatus />
       <ContextMenu disabled={!isAdmin} actionsRef={menuActionsRef}>
         <ContextMenuTrigger
           onTouchStart={(event) => { if (isAdmin) event.preventBaseUIHandler() }}

@@ -390,7 +390,38 @@ describe("InboxPopover friend requests", () => {
   })
 })
 
+it("keeps failed marked reads distinct from empty and disables pending retry", () => {
+  const onRetryMarked = vi.fn()
+  const props = { unreads: [], unreadDms: [], mentions: [], marked: [], markedError: true, onRetryMarked, hasProjectedUnreads: false, hasProjectedMentions: false }
+  const renderer = render(React.createElement(InboxPopover, props))
+  expect(renderer.queryByText("No marked messages")).toBeNull()
+  fireEvent.click(renderer.getByRole("button", { name: "Retry" }))
+  expect(onRetryMarked).toHaveBeenCalledOnce()
+  renderer.rerender(React.createElement(InboxPopover, { ...props, markedRetrying: true }))
+  expect(renderer.getByRole("button", { name: "Retrying…" })).toBeDisabled()
+  renderer.rerender(React.createElement(InboxPopover, { ...props, markedError: false }))
+  expect(renderer.getByText("No marked messages")).toBeInTheDocument()
+})
+
 describe("InboxPopover attention errors", () => {
+  it("shows Marked failure and retries without claiming an empty list", () => {
+    const onRetryMarked = vi.fn()
+    const renderer = render(React.createElement(InboxPopover, {
+      unreads: [], unreadDms: [], mentions: [], marked: [], markedError: true, onRetryMarked,
+      hasProjectedUnreads: false, hasProjectedMentions: false,
+    }))
+    const marked = renderer.getByTestId(tid.inboxTabScroll("marked"))
+    expect(marked.textContent).not.toContain("No marked messages")
+    expect(marked.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load Inbox")
+    fireEvent.click(renderer.getByRole("button", { name: "Retry" }))
+    expect(onRetryMarked).toHaveBeenCalledOnce()
+    renderer.rerender(React.createElement(InboxPopover, {
+      unreads: [], unreadDms: [], mentions: [], marked: [], markedError: false,
+      hasProjectedUnreads: false, hasProjectedMentions: false,
+    }))
+    expect(marked.textContent).toContain("No marked messages")
+  })
+
   it("shows Retry instead of Caught up on an initial attention failure", () => {
     const onRetryAttention = vi.fn()
     const renderer = render(React.createElement(InboxPopover, {

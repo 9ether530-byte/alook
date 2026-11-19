@@ -1,6 +1,6 @@
 "use client"
 
-import { searchCommunityUserIds } from "@/lib/community/user-search"
+import { searchCommunityUsers } from "@/lib/community/user-search"
 import { useCommunityPreviewProfiles } from "@/stores/community/profile-preview"
 import { useObservedRegion } from "@/lib/observability/regions"
 
@@ -11,7 +11,7 @@ import { useAtom, useCreateAtom } from "@tanstack/react-store"
 import { captureCommunityLiveSnapshotToken, assertCommunityLiveSnapshotTokenCurrent } from "@/lib/community-db/sync"
 import { isAbortError } from "@/lib/errors"
 import type React from "react"
-import { Users, MessagesSquare, ChevronLeft, Check, LoaderCircle, X, AtSign, UserMinus, Ban, UserPlus, Search } from "lucide-react"
+import { Users, MessagesSquare, ChevronLeft, Check, LoaderCircle, X, AtSign, UserMinus, Ban, UserPlus, Search } from "@/components/icons/lucide";
 import { toastApiError } from "@/lib/api/client"
 
 import { Button } from "@/components/ui/button"
@@ -21,12 +21,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu"
 import { Avatar } from "../avatar"
 import { EmptyState } from "../empty-state"
+import { HOME_TAB_COLUMN_CLASS } from "../home-tab-layout"
 import { FriendRowsSkeleton, FriendsPageSkeleton } from "./friends-page-skeleton"
 import { hasStatus } from "./status-presets"
 import type { Friend, PendingRequest, BlockedUser } from "@/lib/community/models/people"
 import type { OpenProfile } from "@/components/community/social/profile-types"
 import { isSelfBotFriendship, isPresenceOffline, MIN_SEARCH_LENGTH } from "@alook/shared"
-import { useCanonicalProfilesByUserId } from "@/lib/community-db/projections"
+import { useCanonicalProfilesProjection } from "@/lib/community-db/projections"
+import { getCommunityDbRegistry } from "@/lib/community-db/collections"
 import { readCommunityProfile } from "@/lib/community/profile-read"
 import { actionableIncomingRequests, compactRequestCount } from "@/lib/community/friend-requests"
 import { useFriendRequestActionState } from "@/hooks/community/use-friend-request-action-state"
@@ -39,7 +41,7 @@ function FriendSection({ title, count, emptyLabel, children }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-2 text-xs font-semibold text-muted-foreground">{title}</div>
       {count === 0 ? <EmptyState icon={Users} label={emptyLabel} /> : <div className="flex flex-col gap-1">{children}</div>}
     </div>
@@ -88,7 +90,8 @@ export function FriendsPage({
 
   const [sendState, setSendState] = useAtom(useCreateAtom<{ status: "idle" | "sending" | "sent" | "failed"; name?: string }>({ status: "idle" }))
   const [searchTerm, setSearchTerm] = useAtom(useCreateAtom(""))
-  const profilesByUserId = useCanonicalProfilesByUserId()
+  const profileProjection = useCanonicalProfilesProjection()
+  const profilesByUserId = profileProjection.data
 
   const relById = useMemo(() => {
     const m = new Map<string, "friend" | "pending" | "blocked">()
@@ -119,14 +122,14 @@ export function FriendsPage({
     enabled: searchTerm.length >= MIN_SEARCH_LENGTH,
     retry: false,
     queryFn: async ({ signal }) => {
-      if (previewProfiles) return [...previewProfiles.values()].filter((profile) => profile.name?.toLowerCase().includes(searchTerm.toLowerCase())).map((profile) => profile.id)
+      if (previewProfiles) return { ids: [...previewProfiles.values()].filter((profile) => profile.name?.toLowerCase().includes(searchTerm.toLowerCase())).map((profile) => profile.id), observed: true }
 
       const token = captureCommunityLiveSnapshotToken(profileQueryClient)
       const assertActive = () => assertCommunityLiveSnapshotTokenCurrent(profileQueryClient, token, signal)
       try {
-        const ids = await searchCommunityUserIds(searchTerm, profileQueryClient, { signal, assertActive }, token)
+        const result = await searchCommunityUsers(searchTerm, profileQueryClient, { signal, assertActive }, token)
         assertActive()
-        return ids
+        return result
       } catch (error) {
         assertActive()
         if (!isAbortError(error)) toastApiError(error, "Search failed", assertActive)
@@ -134,13 +137,22 @@ export function FriendsPage({
       }
     },
   })
-  const searchResults = searchTerm === addValue.trim() && searchTerm.length >= MIN_SEARCH_LENGTH ? searchQuery.data ?? [] : []
+  const searchComplete = !!searchQuery.data && profileProjection.isReady && profileProjection.isEnabled && !profileProjection.isError
+    && searchQuery.data.ids.every(id => (previewProfiles ?? profileProjection.resourceProfiles).has(id))
+  const isCurrentSearch = () => {
+    const state = profileQueryClient.getQueryState<typeof searchQuery.data>(["community", "user-search", searchTerm])
+    return searchComplete && (previewProfiles || getCommunityDbRegistry(profileQueryClient) === profileProjection.registry)
+      && state?.status === "success" && !state.isInvalidated && state.data === searchQuery.data && state.data?.observed === true
+  }
+  const searchActionable = !!isCurrentSearch()
+  const searchResults = searchTerm === addValue.trim() && searchTerm.length >= MIN_SEARCH_LENGTH && searchComplete ? searchQuery.data!.ids : []
 
   if (loading && friends.length === 0 && pending.length === 0 && blocked.length === 0) {
     return <FriendsPageSkeleton reserveBackSlot={reserveBackSlot || Boolean(onBack)} />
   }
 
   const sendRequest = (u: { id: string; name: string; discriminator: string }) => {
+    if (!isCurrentSearch() || searchTerm !== addValue.trim() || !searchQuery.data?.ids.includes(u.id)) return
     const username = `${u.name}#${u.discriminator}`
     setAddValue("")
     setSearchTerm("")
@@ -151,7 +163,7 @@ export function FriendsPage({
   }
   const typedTerm = addValue.trim()
   const searchSettled = searchTerm === typedTerm && searchTerm.length >= MIN_SEARCH_LENGTH && !searchQuery.isFetching
-  const notFound = searchSettled && searchQuery.isSuccess && searchResults.length === 0
+  const notFound = searchSettled && searchComplete && !searchQuery.isError && searchResults.length === 0
   const searchFailed = searchSettled && searchQuery.isError
   const searching = typedTerm.length >= MIN_SEARCH_LENGTH && !searchSettled
 
@@ -204,30 +216,33 @@ export function FriendsPage({
       onValueChange={(value) => onActiveTabChange?.(value as "all" | "new")}
       className="min-h-0 flex-1"
     >
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border/40 px-4">
-        {onBack && (
-          <Button variant="ghost" size="icon-sm" onClick={onBack} className="shrink-0 text-muted-foreground hover:text-foreground sm:hidden" aria-label="Back"><ChevronLeft className="size-5" /></Button>
-        )}
-        <TabsList variant="line">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="new">
-            <span className="inline-flex items-center gap-1.5">
-              New
-              {incomingCount && (
-                <span
-                  data-testid={tid.friendsNewBadge}
-                  className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground"
-                >
-                  {incomingCount}
-                </span>
-              )}
-            </span>
-          </TabsTrigger>
-        </TabsList>
-      </header>
+      <div className="shrink-0 px-4">
+        <header data-slot="home-tab-column" className={`${HOME_TAB_COLUMN_CLASS} flex h-12 items-center gap-2 border-b border-border/40`}>
+          {onBack && (
+            <Button variant="ghost" size="icon-sm" onClick={onBack} className="shrink-0 text-muted-foreground hover:text-foreground sm:hidden" aria-label="Back"><ChevronLeft className="size-5" /></Button>
+          )}
+          <TabsList variant="line">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="new">
+              <span className="inline-flex items-center gap-1.5">
+                New
+                {incomingCount && (
+                  <span
+                    data-testid={tid.friendsNewBadge}
+                    className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground"
+                  >
+                    {incomingCount}
+                  </span>
+                )}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+        </header>
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto thin-scrollbar p-4">
-        <TabsContent value="all">
+        <div data-slot="home-tab-column" className={`${HOME_TAB_COLUMN_CLASS} flex flex-1 flex-col`}>
+          <TabsContent value="all" className={blocked.length === 0 ? "flex flex-col" : undefined}>
           <div className="mb-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -300,7 +315,7 @@ export function FriendsPage({
               </div>
               <div id="friends-add-status" data-testid="friends-add-status" aria-live="polite" className="min-h-5 pt-1.5 text-xs">
                 {notFound ? <FieldError>No one goes by “{typedTerm}”. Check the username and try again.</FieldError>
-                  : searchFailed ? <FieldError>Search didn’t work. Try again.</FieldError>
+                  : searchFailed ? <><FieldError>Search didn’t work. Try again.</FieldError><Button variant="ghost" size="sm" disabled={searchQuery.isFetching} onClick={() => { void searchQuery.refetch() }}>Retry search</Button>{searchComplete && searchResults.length === 0 && <span className="text-muted-foreground">Previous search had no matches.</span>}</>
                   : searching ? <span className="inline-flex items-center gap-1.5 text-muted-foreground"><LoaderCircle aria-hidden className="size-3.5 animate-spin motion-reduce:animate-none" />Searching…</span>
                   : sendState.status === "sending" ? <span className="inline-flex items-center gap-1.5 text-muted-foreground"><LoaderCircle aria-hidden className="size-3.5 animate-spin motion-reduce:animate-none" />Sending a request to {sendState.name}…</span>
                   : sendState.status === "sent" ? <span className="inline-flex items-center gap-1.5 text-foreground"><Check aria-hidden className="size-3.5 text-(--tn-led-ok,var(--primary))" />Request sent to {sendState.name}.</span>
@@ -317,7 +332,7 @@ export function FriendsPage({
                       <button
                         key={userId}
                         onClick={() => { if (!rel) sendRequest(u) }}
-                        disabled={!!rel}
+                        disabled={!!rel || !searchActionable}
                         className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:hover:bg-transparent"
                       >
                         <Avatar label={u.avatar} seed={userId} size={28} />
@@ -410,6 +425,7 @@ export function FriendsPage({
             </>
           )}
         </TabsContent>
+        </div>
       </div>
     </Tabs>
   )

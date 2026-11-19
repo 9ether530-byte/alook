@@ -111,7 +111,7 @@ There is no per-turn built-in fallback.
 | Cursor | session | `stdio_rpc` / `cursor.acp.v1` | `steer` | `transport_request` |
 | OpenCode | session | `http_sse` / `opencode.v2.service` | `steer` | `transport_request` |
 | Pi | session | `in_process_sdk` / `pi_sdk` | `steer` | `prompt_invocation` |
-| Antigravity CLI (`agy`) | session | `stdio_stream` / `agy.stream-json.v1` | `next_turn_queue` | `vendor_message` |
+| Antigravity CLI (`agy`) | session | `stdio_rpc` / `agy.acp.v1` | `steer` | `transport_request` |
 | Qoder | session | owned SDK worker / `qoder.sdk-worker.v1` | `steer` | `prompt_invocation` |
 | Copilot | session | owned SDK worker / `copilot.sdk-worker.v1` | `steer` | `prompt_invocation` |
 | Cursor SDK | session | owned SDK worker / `cursor-sdk.sdk-worker.v1` | `steer` | `prompt_invocation` |
@@ -338,31 +338,52 @@ Discovery and launch share the same executable lookup: an explicit `command`,
 `agy` on PATH, then `~/.local/bin/agy` on macOS/Linux or
 `%LOCALAPPDATA%/agy/bin/agy.exe` on Windows (the default user-local directory
 is used only when `LOCALAPPDATA` is absent). Run the selected CLI executable in a terminal and finish
-Google sign-in before starting a bot; ACP authentication is separate.
+Google sign-in before starting a bot; the CLI ACP process uses that native sign-in state.
 
-Opening the model list runs the native `agy models` command and preserves its returned slugs and labels. Installation checks and Bot launch do not run that command. The model list does not establish an authenticated model request or infer per-model effort support.
+Opening the model list runs the native `agy models` command and preserves its returned slugs and labels. Installation checks and Bot launch do not run that command; machine quota polling uses it to check sign-in. The model list does not establish an authenticated model request or infer per-model effort support.
 
-The CLI must advertise native `--input-format stream-json`,
-`--output-format stream-json` and `--conversation` support. Alook keeps one
-process across turns and queues busy input until the current result completes.
-It passes selected model and effort through `--model` and `--effort`, delivers
-standing instructions with the first input, and uses the injected Alook CLI
-through the existing host environment. Sign-in is local to the native CLI;
-discovery compatibility does not prove an authenticated model request.
+The CLI must support `agy acp --process-per-session`. Discovery checks the
+actual ACP help rather than the top-level menu; version 1.4.12 supports this
+entry without listing it there. Alook keeps one ACP process and session across
+turns. A concurrent `session/prompt` steers the active native loop. The root
+stays active until every prompt response settles; an earlier response cannot
+close it. Only native invalid-params rejection returns a steer as rejected;
+other prompt failures remain loop failures. Native cancellation uses
+`session/cancel`; stop and reset retain the existing process authority.
 
-Resume passes the exact saved conversation ID to `--conversation`. A missing
-or substituted ID fails; no new conversation is silently accepted. The CLI
-does not support ACP or Claude control messages. This backend declares
-`interrupt: false`; stop and reset retain the existing process cleanup boundary.
+Native ACP can return `end_turn` after a provider failure, even with positive
+usage. The adapter therefore verifies the exact conversation's persisted
+`executor_metadata` terminal after all prompt responses settle. It checkpoints
+before each new root and accepts only one new executor identity. Missing,
+malformed, ambiguous or unreadable state cannot report success. Unverified
+subtrajectory ownership also fails explicitly. This uses Node's built-in
+SQLite where available and the packaged `better-sqlite3` runtime on Node20; startup reports an incompatible
+configuration when native state cannot be read. The selected `GEMINI_HOME`, or
+the native default `.gemini`, is shared with the launched CLI.
 
-Token usage comes from live completed step events, deduplicated with native
-conversation/step identity. Cumulative result usage is not added again. Unknown
-counts remain unknown. Provider quota is unsupported until a CLI-specific
-source is established; ACP credentials and quota are not reused.
+Standing instructions use native `systemPrompt.append` metadata on both new and
+resumed sessions. The installed server must advertise that capability. Model
+family and thought level use separate native config selectors, confirmed by
+both the response and a matching notification. Existing native catalog slugs
+with effort suffixes are resolved against the advertised family and options.
 
-Version 1.3.4 was checked for executable discovery, advertised protocol and
-unauthenticated startup cleanup. Authenticated multi-turn and resume acceptance
-are separate checks and must not be inferred from protocol fixtures.
+Resume verifies the exact saved session and working directory through
+`session/list` before `session/resume`. Missing, substituted or mismatched
+sessions require an explicit reset. Requested instructions, model and effort
+are applied again because native resume does not retain all launch settings.
+
+Token usage comes from settled native prompt responses, once per shared loop,
+including when only an earlier prompt reports it. Version1.4.12 includes cache
+in input and excludes thought from output;1.5.9 already reports those normalized
+counts. Only these independently measured version profiles are used. Other
+versions report usage unavailable until verified. Unknown counts remain unknown. Native quota
+discovery still uses the CLI `/usage` command after the signed-in `models`
+preflight; quota responses are separate from generation usage.
+
+Version 1.4.12 was exercised with the real CLI and MCP process against an
+isolated scripted provider for busy steering, next-turn reuse, resume settings
+and nonzero usage. This proves protocol behavior; real supplier-model adoption
+and the full durable-unread daemon journey need separate acceptance evidence.
 
 ## Antigravity (native ACP)
 
@@ -447,3 +468,17 @@ Opening a model list requests the selected machine and backend through the owner
 The existing `codex` ID retains PATH-first, then App discovery for previously saved bot bindings. It is hidden from new selections when explicit source IDs are reported, and remains available when editing an existing binding or using an older daemon. Existing bot bindings are not rewritten. Explicit command overrides remain supported.
 
 Apply migration `0113_community_machine_backend_quota_codex_sources.sql` before the updated daemon reports source-specific quotas. It preserves existing observations and adds independent App/CLI keys.
+
+## Machine account plans and quotas
+
+Machine quota describes the backend's default machine login. A bot's environment overrides can select another account; these observations do not describe that bot's account.
+
+Cursor CLI uses its selected native credential store: `AGENT_CLI_CREDENTIAL_STORE=file`, ephemeral `memory`, or the platform default (Keychain on macOS, file elsewhere). It never falls back across stores. Cursor SDK separately reads `CURSOR_API_KEY` or its unexpired, backend-matched `~/.cursor/sdk/auth.json`. Its production authentication backend is `https://api2.cursor.sh`; custom backends are unavailable. Both query the official Dashboard plan/period endpoints. CLI and SDK credentials are not shared.
+
+Copilot uses `account.getCurrentAuth()` and `account.getQuota()` through an owned SDK stdio connection. Qoder starts an independent SDK daemon and calls `getUsageInfo()`. Neither creates a model session. Qoder account totals include additive credit pools; session credits are never account quota. A plan with no usable limit, including unlimited entitlements, is reported without a percentage. An absent Qoder account ID gives each read a new source epoch.
+
+The daemon queries healthy installed backends on connection and every five minutes. In-flight and recent reads share a 30-second cache. Reconnects retain remaining freshness; each polling update carries only its own backend. Errors preserve the database's same-account observation age, while a changed source epoch replaces the old account data. Every short SDK query has a deadline and the existing process-tree cleanup boundary.
+
+Apply `0117_community_machine_backend_quota_plans.sql` before deploying the updated server and daemon. It preserves old observations, admits Cursor, Cursor SDK, Copilot, Qoder and agy, and permits plan-only observations. OpenCode, Pi and Pi Durable still have no independent vendor plan reader; upstream accounts are not inferred from model names.
+
+Official Copilot SDK 1.0.34 and Qoder SDK 1.0.59 were tested against local protocol runtimes, including timeout isolation from a running Qoder bot. These contracts do not establish real supplier-account acceptance. The installed agy reader returned native quota without a model turn. Cursor authentication-store behavior is covered with controlled credentials.

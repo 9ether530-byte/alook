@@ -12,6 +12,7 @@ import type { CommunityPanel } from "@/components/community/shell/community-pane
 import type { Member } from "@/lib/community/models/people"
 import type { ComposerProps } from "@/components/community/messages/composer"
 import { toastApiError } from "@/lib/api/client"
+import { isAbortError } from "@/lib/errors"
 import { makeUserNameResolver } from "@/lib/community/display-name"
 import { readCommunityProfile } from "@/lib/community/profile-read"
 import {
@@ -40,6 +41,11 @@ export type ChannelMemberPanelProps = Pick<
   | "members"
   | "memberScopeId"
   | "membersLoading"
+  | "membersKnown"
+  | "memberActionsEnabled"
+  | "membersFailed"
+  | "membersRefreshing"
+  | "onRetryMembers"
   | "membersLoadingMore"
   | "membersHasMore"
   | "onLoadMoreMembers"
@@ -70,6 +76,7 @@ export function useChannelMemberViewModel({
   isNotifyUnit,
   currentUser,
   accessAllowed = true,
+  routeActive = true,
   roleDisplayAllowed = accessAllowed,
 }: {
   serverId: string
@@ -82,6 +89,7 @@ export function useChannelMemberViewModel({
   isNotifyUnit: boolean
   currentUser: { id: string }
   accessAllowed?: boolean
+  routeActive?: boolean
   roleDisplayAllowed?: boolean
 }): {
   composerMembers: Member[]
@@ -90,14 +98,20 @@ export function useChannelMemberViewModel({
   manageMembersDialog: ReactNode
   resolveUserName: (userId: string) => string
   myRole: Role | undefined
+  onLeaveChannel?: () => Promise<void>
 } {
   const membersHook = useServerMembers(accessAllowed && currentServer ? serverId : null)
   const myRole = useViewerServerRole(roleDisplayAllowed && currentServer ? serverId : null, currentUser.id)
   const source = useCommunityViewSource(`channel-members:${serverId}:${channelId}`, accessAllowed)
+  const leaveSource = useCommunityViewSource(`channel-leave:${serverId}:${channelId}`, routeActive)
   const originalView = useCallback((caller?: MemberOriginalView) => {
     const local = source.capture()
     return Object.assign(() => { local(); caller?.() }, { signal: caller?.signal ?? local.signal })
   }, [source])
+  const leaveView = useCallback((caller?: MemberOriginalView) => {
+    const local = leaveSource.capture()
+    return Object.assign(() => { local.assertOwner(); caller?.() }, { signal: caller?.signal ?? local.signal })
+  }, [leaveSource])
   const members = membersHook.members
   const [memberUi, setMemberUi] = useAtom(useCreateAtom({ channelId, query: "", dialogOpen: false }))
   const memberQuery = memberUi.channelId === channelId ? memberUi.query : ""
@@ -140,26 +154,24 @@ export function useChannelMemberViewModel({
   const refetchParentMembers = parentChannelMembersHook.refetch
   const participantCandidatesResolved =
     participantMembersData !== undefined && parentMembersData !== undefined
-  const participantCandidatesError = !participantCandidatesResolved && (
-    (participantMembersData === undefined && channelMembersHook.isError) ||
-    (parentMembersData === undefined && parentChannelMembersHook.isError)
-  )
+  const participantCandidatesError = channelMembersHook.failed || channelMembersHook.isError || parentChannelMembersHook.failed || parentChannelMembersHook.isError
   const participantCandidatesLoading =
     !participantCandidatesResolved && !participantCandidatesError
-  const participantCandidatesRetrying = !participantCandidatesResolved && (
-    (participantMembersData === undefined && channelMembersHook.isFetching) ||
-    (parentMembersData === undefined && parentChannelMembersHook.isFetching)
-  )
+  const participantCandidatesRetrying = channelMembersHook.isFetching || parentChannelMembersHook.isFetching
   const retryParticipantCandidates = useCallback(() => {
     const retries: Array<Promise<unknown>> = []
-    if (participantMembersData === undefined) retries.push(refetchParticipantMembers())
-    if (parentMembersData === undefined) retries.push(refetchParentMembers())
+    if (participantMembersData === undefined || channelMembersHook.failed || channelMembersHook.isError) retries.push(refetchParticipantMembers())
+    if (parentMembersData === undefined || parentChannelMembersHook.failed || parentChannelMembersHook.isError) retries.push(refetchParentMembers())
     void Promise.all(retries)
   }, [
     parentMembersData,
     participantMembersData,
     refetchParentMembers,
     refetchParticipantMembers,
+    channelMembersHook.failed,
+    channelMembersHook.isError,
+    parentChannelMembersHook.failed,
+    parentChannelMembersHook.isError,
   ])
   const addableChannelMembers = useAddableMembers(
     serverId,
@@ -175,7 +187,7 @@ export function useChannelMemberViewModel({
     refetch: refetchAddableMembers,
   } = addableChannelMembers
   const addChannelMemberMut = useAddChannelMember(channelId)
-  const removeChannelMemberMut = useRemoveChannelMember(channelId)
+  const removeChannelMemberMut = useRemoveChannelMember(channelId, serverId, currentUser.id)
   const parentChannel = currentChannelMeta?.parentChannelId
     ? currentServer?.categories
       ?.flatMap((category) => category.channels)
@@ -319,13 +331,38 @@ export function useChannelMemberViewModel({
   const viewerIsUnitCreator = !!unitCreatorId && unitCreatorId === currentUser.id
   const scopedDrawer = isNotifyUnit || currentChannelPrivate
   const removeMember = isNotifyUnit ? removeThreadParticipantMut : removeChannelMemberMut
+  const viewerInNotifyRoster = isNotifyUnit && channelMembersHook.members.some((member) => member.userId === currentUser.id)
+  const canLeaveChannel = accessAllowed && channelMembersHook.observed && (isNotifyUnit ? viewerInNotifyRoster : currentChannelPrivate)
+  const onLeaveChannel = useMemo(() => {
+    if (!canLeaveChannel) return undefined
+    return async () => {
+      const local = leaveSource.capture()
+      const assert = Object.assign(() => local.assertOwner(), { signal: local.signal })
+      try {
+        if (!channelMembersHook.isCurrentRead()) throw new DOMException("Member roster changed", "AbortError")
+        assert()
+        await removeMember.mutateAsync({ userId: currentUser.id, assertActive: assert })
+        assert()
+      } catch (error) {
+        if (!isAbortError(error)) toastApiError(error, "Failed to leave", assert)
+        throw error
+      }
+    }
+  }, [canLeaveChannel, currentUser.id, leaveSource, removeMember, channelMembersHook])
   const manageContext = scopedDrawer
     ? {
         viewerUserId: currentUser.id,
+        actionable: channelMembersHook.observed,
         viewerIsCreator: viewerIsUnitCreator,
         unitLabel: currentChannelMeta?.name ?? channelName,
-        onLeave: (userId: string, caller?: MemberOriginalView) => removeMember.mutateAsync({ userId, assertActive: originalView(caller) }),
-        onRemove: (userId: string, caller?: MemberOriginalView) => removeMember.mutateAsync({ userId, assertActive: originalView(caller) }),
+        onLeave: (userId: string, caller?: MemberOriginalView) => {
+          if (!channelMembersHook.isCurrentRead()) throw new DOMException("Member roster changed", "AbortError")
+          return removeMember.mutateAsync({ userId, assertActive: leaveView(caller) })
+        },
+        onRemove: (userId: string, caller?: MemberOriginalView) => {
+          if (!channelMembersHook.isCurrentRead()) throw new DOMException("Member roster changed", "AbortError")
+          return removeMember.mutateAsync({ userId, assertActive: originalView(caller) })
+        },
       }
     : undefined
 
@@ -337,7 +374,12 @@ export function useChannelMemberViewModel({
   const memberPanelProps: ChannelMemberPanelProps = {
     memberScopeId: `${serverId}:${channelId}`,
     members: panelMembers,
-    membersLoading: scopedDrawer ? channelMembersHook.isLoading : membersHook.loading,
+    membersLoading: scopedDrawer ? channelMembersHook.loading : membersHook.loading,
+    membersKnown: scopedDrawer ? channelMembersHook.data !== undefined : membersHook.displayReady,
+    memberActionsEnabled: scopedDrawer ? channelMembersHook.observed : membersHook.observed,
+    membersFailed: scopedDrawer ? channelMembersHook.failed || channelMembersHook.isError : membersHook.failed || membersHook.refreshFailed,
+    membersRefreshing: scopedDrawer ? channelMembersHook.isFetching : membersHook.refreshing,
+    onRetryMembers: scopedDrawer ? () => { void refetchParticipantMembers() } : membersHook.refresh,
     membersLoadingMore: scopedDrawer ? false : membersHook.loadingMore,
     membersHasMore: scopedDrawer ? false : membersHook.hasMore,
     onLoadMoreMembers: scopedDrawer ? undefined : membersHook.loadMore,
@@ -352,6 +394,7 @@ export function useChannelMemberViewModel({
     onSetRole: (memberId: string, role: Role) => {
       const assert = source.capture()
       assert()
+      if (!membersHook.isCurrentRead()) return
       setMemberRoleMut.mutate({ serverId, memberId, role, assertActive: assert }, {
         onSuccess: () => { try { assert() } catch { return }; toast("Role updated") },
         onError: (error) => toastApiError(error, "Failed to update role", assert),
@@ -360,6 +403,7 @@ export function useChannelMemberViewModel({
     onKickMember: (memberId: string, caller?: MemberOriginalView) => {
       const assert = originalView(caller)
       assert()
+      if (!membersHook.isCurrentRead()) throw new DOMException("Member roster changed", "AbortError")
       return kickMemberMut.mutateAsync({ serverId, memberId, assertActive: assert }).then(() => { assert(); toast("Member kicked") })
     },
   }
@@ -381,12 +425,16 @@ export function useChannelMemberViewModel({
           candidates={candidates}
           queryState={{
             resolved: participantCandidatesResolved,
+            actionable: channelMembersHook.observed && parentChannelMembersHook.observed,
             loading: participantCandidatesLoading,
             error: participantCandidatesError,
             retrying: participantCandidatesRetrying,
             retry: retryParticipantCandidates,
           }}
-          onAdd={(userId, caller) => addThreadParticipantMut.mutateAsync({ userId, assertActive: originalView(caller) })}
+          onAdd={(userId, caller) => {
+            if (!channelMembersHook.isCurrentRead() || !parentChannelMembersHook.isCurrentRead()) throw new DOMException("Participant candidates changed", "AbortError")
+            return addThreadParticipantMut.mutateAsync({ userId, assertActive: originalView(caller) })
+          }}
           onClose={() => setMemberUi({ channelId, query: memberQuery, dialogOpen: false })}
         />
       )
@@ -404,17 +452,20 @@ export function useChannelMemberViewModel({
         candidates={candidates}
         queryState={{
           resolved: addableMembersData !== undefined,
+          actionable: addableChannelMembers.observed,
           loading: addableMembersLoading,
           error: addableMembersError,
-          retrying:
-            addableMembersData === undefined && addableMembersFetching,
+          retrying: addableMembersFetching,
           retry: () => { void refetchAddableMembers() },
         }}
-        onAdd={(userId, caller) => addChannelMemberMut.mutateAsync({ userId, assertActive: originalView(caller) })}
+        onAdd={(userId, caller) => {
+          if (!addableChannelMembers.isCurrentRead()) throw new DOMException("Member candidates changed", "AbortError")
+          return addChannelMemberMut.mutateAsync({ userId, assertActive: originalView(caller) })
+        }}
         onClose={() => setMemberUi({ channelId, query: memberQuery, dialogOpen: false })}
       />
     )
-  }, [manageMembersOpen, isNotifyUnit, addableMembers, serverId, channelId, channelName, addableMembersData, addableMembersLoading, addableMembersError, addableMembersFetching, participantMembersData, parentMembersData, currentChannelMeta?.name, participantCandidatesResolved, participantCandidatesLoading, participantCandidatesError, participantCandidatesRetrying, retryParticipantCandidates, currentUser.id, addThreadParticipantMut, originalView, setMemberUi, memberQuery, refetchAddableMembers, addChannelMemberMut])
+  }, [manageMembersOpen, isNotifyUnit, addableMembers, serverId, channelId, channelName, addableMembersData, addableMembersLoading, addableMembersError, addableMembersFetching, participantMembersData, parentMembersData, currentChannelMeta?.name, participantCandidatesResolved, participantCandidatesLoading, participantCandidatesError, participantCandidatesRetrying, retryParticipantCandidates, currentUser.id, addThreadParticipantMut, originalView, setMemberUi, memberQuery, refetchAddableMembers, addChannelMemberMut, channelMembersHook, parentChannelMembersHook, addableChannelMembers])
 
   const memberNames = JSON.stringify(membersHook.members.map(({ userId, id, name }) => ({ userId, id, name })))
   const resolveUserName = useMemo(
@@ -429,5 +480,6 @@ export function useChannelMemberViewModel({
     manageMembersDialog,
     resolveUserName,
     myRole,
+    onLeaveChannel,
   }
 }

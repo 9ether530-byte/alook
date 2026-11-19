@@ -8,7 +8,8 @@ import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import type { ServerSettingsEditor } from "./server-settings-editor"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Settings, Users, Link2, Bell, Trash2, X, Shield, Search, Camera, Hash } from "lucide-react"
+import { Link2 } from "lucide-react";
+import { Settings, Users, Bell, Trash2, X, Shield, Search, Camera, Hash } from "@/components/icons/lucide";
 import {
   isServerOwner,
   NOTIF_LEVELS,
@@ -26,6 +27,8 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar } from "../avatar"
+import { EmptyState } from "../empty-state"
+import { ConversationResolutionErrorFrame } from "../channels/conversation-resolution-error-frame"
 import { ServerIcon } from "../server-icon"
 import { avatarInitial } from "@/lib/community/avatar"
 import { SlugHint } from "./slug-hint"
@@ -38,6 +41,7 @@ import type { Member, InviteRow } from "@/lib/community/models/people"
 import type { OpenProfile } from "@/components/community/social/profile-types"
 import { SettingsShell, SettingsShellPanel, type SettingsShellTab } from "./settings-shell"
 import { useBots } from "@/hooks/community/use-bots"
+import { useCommunityViewSource } from "@/hooks/community/use-community-view-source"
 import {
   resolveServerNotificationDisplayLevel,
   useBotNotificationSetting,
@@ -57,6 +61,7 @@ export function ServerSettings({
   section, setSection, onClose, serverId, serverName, serverIcon,
   isAdmin = false,
   members, membersLoading, membersLoadingMore, membersHasMore, membersTotal, onLoadMoreMembers, onSearchMembers,
+  membersKnown = true, membersFailed, membersRefreshing, onRetryMembers,
   onOpenProfile,
   onKickMember, onSetRole, onRevokeInvite, onCopyInvite, onDeleteServer, onUploadIcon, editor, captureSaveFeedback, notifLevel, onSetNotifLevel,
 }: {
@@ -69,6 +74,10 @@ export function ServerSettings({
   isAdmin?: boolean
   members: Member[]
   membersLoading?: boolean
+  membersKnown?: boolean
+  membersFailed?: boolean
+  membersRefreshing?: boolean
+  onRetryMembers?: () => void
   membersLoadingMore?: boolean
   membersHasMore?: boolean
   membersTotal?: number
@@ -91,9 +100,12 @@ export function ServerSettings({
 
   // Invites are low-frequency, admin-only panel data. Fetch them only when
   // their tab is open, never on settings mount or via WS.
-  const { invites, isLoading: invitesLoading } = useInvites(serverId, section === "invites")
+  const invitesQuery = useInvites(serverId, section === "invites")
+  const { invites, loading: invitesLoading, isFetching: invitesFetching, refetch: retryInvites } = invitesQuery
+  const invitesKnown = invitesQuery.data !== undefined
+  const invitesFailed = invitesQuery.failed
 
-  useObservedRegion("settings", visibleSection === "members" ? !membersLoading : visibleSection === "invites" ? !invitesLoading : visibleSection !== "channels", visibleSection === "members" ? members.length : visibleSection === "invites" ? invites.length : 1)
+  useObservedRegion("settings", visibleSection === "members" ? !membersLoading : visibleSection === "invites" ? !invitesLoading && !invitesFailed : visibleSection !== "channels", visibleSection === "members" ? members.length : visibleSection === "invites" ? invites.length : 1)
 
   const nav: SettingsShellTab<SettingsSection>[] = [
     { value: "overview", label: "Overview", icon: Settings },
@@ -122,9 +134,12 @@ export function ServerSettings({
         onClose={onClose}
       >
         <SettingsShellPanel value="overview"><SettingsOverview key={serverId} serverId={serverId} serverIcon={serverIcon} onUploadIcon={onUploadIcon} editor={editor} captureSaveFeedback={captureSaveFeedback} onRequestDelete={() => setConfirmDelete(true)} /></SettingsShellPanel>
-        {isAdmin && section === "channels" && <SettingsShellPanel value="channels"><ServerSettingsChannels key={serverId} serverId={serverId} /></SettingsShellPanel>}
-        <SettingsShellPanel value="members" className="h-full"><SettingsMembers members={members} loading={membersLoading} loadingMore={membersLoadingMore} hasMore={membersHasMore} total={membersTotal} onLoadMore={onLoadMoreMembers} onSearch={onSearchMembers} onOpenProfile={onOpenProfile} onKickMember={onKickMember} onSetRole={onSetRole} /></SettingsShellPanel>
-        <SettingsShellPanel value="invites"><SettingsInvites invites={invites} loading={invitesLoading} onRevokeInvite={onRevokeInvite} onCopyInvite={onCopyInvite} /></SettingsShellPanel>
+        {isAdmin && section === "channels" && <SettingsShellPanel value="channels" fill><ServerSettingsChannels key={serverId} serverId={serverId} /></SettingsShellPanel>}
+        <SettingsShellPanel value="members" className="h-full"><SettingsMembers members={members} loading={membersLoading} known={membersKnown} failed={membersFailed} retrying={membersRefreshing} onRetry={onRetryMembers} loadingMore={membersLoadingMore} hasMore={membersHasMore} total={membersTotal} onLoadMore={onLoadMoreMembers} onSearch={onSearchMembers} onOpenProfile={onOpenProfile} onKickMember={onKickMember} onSetRole={onSetRole} /></SettingsShellPanel>
+        <SettingsShellPanel value="invites" fill>{invitesFailed && invites.length === 0 ? <ConversationResolutionErrorFrame as="div" title="Could not load invites." retrying={invitesFetching} onRetry={() => { void retryInvites() }} /> : <>
+          {(invitesQuery.refreshFailed || invitesFailed) && <div role="alert" className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Could not {invitesKnown ? "refresh" : "load"} invites.</span><Button variant="ghost" size="sm" disabled={invitesFetching} onClick={() => { void retryInvites() }}>Retry</Button></div>}
+          <SettingsInvites invites={invites} loading={invitesLoading} onRevokeInvite={invitesQuery.observed && onRevokeInvite ? code => { if (invitesQuery.isCurrentRead()) onRevokeInvite(code) } : undefined} onCopyInvite={invitesQuery.observed && onCopyInvite ? code => { if (invitesQuery.isCurrentRead()) onCopyInvite(code) } : undefined} />
+        </>}</SettingsShellPanel>
         <SettingsShellPanel value="notifications"><SettingsNotifications serverId={serverId} level={notifLevel} onSetLevel={onSetNotifLevel} /></SettingsShellPanel>
       </SettingsShell>
     </>
@@ -201,9 +216,13 @@ function SettingsOverview({ serverId, serverIcon, onUploadIcon, editor, captureS
 
 const SETTINGS_ROW_HEIGHT = 68
 
-function SettingsMembers({ members, loading, loadingMore, hasMore, total, onLoadMore, onSearch, onOpenProfile, onKickMember, onSetRole }: {
+function SettingsMembers({ members, loading, known, failed, retrying, onRetry, loadingMore, hasMore, total, onLoadMore, onSearch, onOpenProfile, onKickMember, onSetRole }: {
   members: Member[]
   loading?: boolean
+  known: boolean
+  failed?: boolean
+  retrying?: boolean
+  onRetry?: () => void
   loadingMore?: boolean
   hasMore?: boolean
   total?: number
@@ -248,6 +267,7 @@ function SettingsMembers({ members, loading, loadingMore, hasMore, total, onLoad
   const shownCount = total ?? members.length
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
+      {failed && <div role="alert" className="mb-3 flex items-center gap-2 text-sm text-muted-foreground"><span>Could not {known ? "refresh" : "load"} members.</span><Button variant="ghost" size="sm" disabled={!onRetry || retrying} onClick={onRetry}>{retrying ? "Retrying…" : "Retry"}</Button></div>}
       {onSearch && (
         <div className="relative mb-4 shrink-0">
           <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -260,7 +280,7 @@ function SettingsMembers({ members, loading, loadingMore, hasMore, total, onLoad
         </div>
       )}
       <div className="mb-4 shrink-0 text-sm text-muted-foreground">
-        {query ? `${members.length} matches` : `${shownCount} members`}
+        {known ? query ? `${members.length} matches` : `${shownCount} members` : "Members unavailable"}
       </div>
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto thin-scrollbar">
         <VirtualRows
@@ -282,6 +302,7 @@ function SettingsMembers({ members, loading, loadingMore, hasMore, total, onLoad
                 ) : (
                   <DropdownMenu>
                     <DropdownMenuTrigger
+                      disabled={!onSetRole}
                       render={<Badge variant="secondary" className="min-h-11 cursor-pointer gap-1 sm:min-h-6" render={<button type="button" />} />}
                     >
                       <Shield className="size-3.5" /> {capitalize(m.role)}
@@ -294,7 +315,7 @@ function SettingsMembers({ members, loading, loadingMore, hasMore, total, onLoad
                   </DropdownMenu>
                 )}
                 {m.role !== "owner" && (
-                  <Button variant="ghost" size="icon-sm" className="size-11 text-muted-foreground hover:text-destructive sm:size-7" aria-label="Kick member" onClick={() => onKickMember?.(m.id)}><Trash2 className="size-4" /></Button>
+                  <Button disabled={!onKickMember} variant="ghost" size="icon-sm" className="size-11 text-muted-foreground hover:text-destructive sm:size-7" aria-label="Kick member" onClick={() => onKickMember?.(m.id)}><Trash2 className="size-4" /></Button>
                 )}
               </div>
             </div>
@@ -319,9 +340,9 @@ function SettingsInvites({ invites, loading, onRevokeInvite, onCopyInvite }: {
   const [revokingCode, setRevokingCode] = useAtom(useCreateAtom<string | null>(null))
   if (loading && invites.length === 0) return <SettingsInvitesSkeleton />
   return (
-    <div className="w-full space-y-2">
+    <div className="flex w-full flex-1 flex-col gap-2">
       {invites.length === 0 && (
-        <p className="text-sm text-muted-foreground">No active invites — use the invite icon in the sidebar header to share this server.</p>
+        <EmptyState icon={Link2} label="No active invites" description="Use the invite icon in the sidebar header to share this server." />
       )}
       {invites.map((iv) => (
         <div key={iv.code} className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-accent/40">
@@ -330,8 +351,8 @@ function SettingsInvites({ invites, loading, onRevokeInvite, onCopyInvite }: {
             <div data-testid={tid.inviteToken} className="truncate font-mono text-sm">{iv.code}</div>
             <div className="text-xs text-muted-foreground" suppressHydrationWarning>by {iv.by} · {iv.uses}{iv.maxUses ? ` / ${iv.maxUses}` : ""} uses · {iv.expiresAt ? `expires ${formatRelativeTime(iv.expiresAt)}` : "never expires"}</div>
           </div>
-          <Button variant="secondary" size="sm" className="h-11 sm:h-8" data-testid={tid.inviteCopy} onClick={() => onCopyInvite?.(iv.code)}>Copy</Button>
-          <Button variant="ghost" size="icon-sm" className="size-11 text-muted-foreground hover:text-destructive sm:size-8" aria-label="Revoke invite" onClick={() => setRevokingCode(iv.code)}><X className="size-4" /></Button>
+          <Button disabled={!onCopyInvite} variant="secondary" size="sm" className="h-11 sm:h-8" data-testid={tid.inviteCopy} onClick={() => onCopyInvite?.(iv.code)}>Copy</Button>
+          <Button disabled={!onRevokeInvite} variant="ghost" size="icon-sm" className="size-11 text-muted-foreground hover:text-destructive sm:size-8" aria-label="Revoke invite" onClick={() => setRevokingCode(iv.code)}><X className="size-4" /></Button>
         </div>
       ))}
       <ConfirmDialog
@@ -351,8 +372,9 @@ export function SettingsNotifications({ serverId, level, onSetLevel }: { serverI
   const [botId, setBotId] = useAtom(useCreateAtom<string | null>(null))
   const botSetting = useBotNotificationSetting(botId, { kind: "server", id: serverId })
   const setBotSetting = useSetBotNotificationSetting()
+  const notificationView = useCommunityViewSource(`bot-server-notifications:${serverId}:${botId}`, Boolean(botId))
   const selectedLevel = botId
-    ? notifLevelDisplay((botSetting.data?.level ?? "all") as "all" | "mentions" | "nothing")
+    ? botSetting.data === undefined ? "" : notifLevelDisplay((botSetting.data.level ?? "all") as "all" | "mentions" | "nothing")
     : resolveServerNotificationDisplayLevel(level)
   // Server-level dropdown = the three shared levels (no "Use Server Default"
   // sentinel — that's channel-only). Value/label/hint from the single source.
@@ -364,7 +386,8 @@ export function SettingsNotifications({ serverId, level, onSetLevel }: { serverI
   }))
   const update = (display: string, raw: "all" | "mentions" | "nothing") => {
     if (!botId) return onSetLevel?.(display)
-    setBotSetting.mutate({ botId, scope: { kind: "server", id: serverId }, level: raw }, {
+    if (!botSetting.confirmed) return
+    setBotSetting.mutate({ botId, scope: { kind: "server", id: serverId }, level: raw, assertActive: notificationView.capture() }, {
       onError: (error) => toastApiError(error, "Failed to update bot notifications"),
     })
   }
@@ -380,7 +403,7 @@ export function SettingsNotifications({ serverId, level, onSetLevel }: { serverI
         </div>
       )}
       {botId && botSetting.isError && (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">This bot cannot access this server.</div>
+        <ConversationResolutionErrorFrame as="div" title={botSetting.forbidden ? "This bot cannot access this server." : "Could not refresh bot notifications."} retrying={botSetting.isFetching} onRetry={() => { void botSetting.refetch() }} />
       )}
       <RadioGroup value={selectedLevel} aria-label="Default server notifications" onValueChange={(value) => {
         const choice = levels.find((item) => item.value === value)
@@ -392,7 +415,7 @@ export function SettingsNotifications({ serverId, level, onSetLevel }: { serverI
           data-selected={selectedLevel === l.value || undefined}
           className="flex min-h-11 w-full items-center gap-3 rounded-lg border p-2 text-left cursor-pointer has-data-disabled:pointer-events-none has-data-disabled:opacity-50"
         >
-          <RadioGroupItem value={l.value} disabled={Boolean(botId && (botSetting.isLoading || botSetting.isError || setBotSetting.isPending))} />
+            <RadioGroupItem value={l.value} disabled={Boolean(botId && (!botSetting.confirmed || setBotSetting.isPending))} />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">{l.label}</div>
             <div className="text-xs text-muted-foreground">{l.hint}</div>
