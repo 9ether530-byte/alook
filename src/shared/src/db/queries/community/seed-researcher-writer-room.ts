@@ -14,7 +14,7 @@ export const SEED_SERVER_NAME = "NativeLayer — Research → Write"
 export const SEED_CHANNEL_NAME = "research-write"
 export const SEED_RESEARCHER_NAME = "Researcher"
 export const SEED_WRITER_NAME = "Writer"
-export const SEED_RUNTIME_DEFAULT = "codex"
+export const SEED_RUNTIME_DEFAULT = "codex-cli"
 
 export const RESEARCHER_INSTRUCTION =
   "You are the Researcher in the room 'NativeLayer — Research → Write'. " +

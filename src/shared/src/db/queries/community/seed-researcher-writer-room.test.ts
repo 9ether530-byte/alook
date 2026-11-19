@@ -129,6 +129,7 @@ CREATE TABLE community_bot_binding (
   runtime TEXT NOT NULL,
   instruction TEXT NOT NULL DEFAULT '',
   model_name TEXT,
+  model_observation TEXT,
   reasoning_effort TEXT,
   runtime_config_revision INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -205,7 +206,7 @@ describe("seedResearcherWriterRoom", () => {
     sqlite.prepare("INSERT INTO user (id, name, email, isBot, ownerUserId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run("owner_1", "Rashad", "owner@example.test", 0, null, now, now)
     sqlite.prepare("INSERT INTO community_machine (id, user_id, display_name, status, available_runtimes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("machine_1", "owner_1", "PC", "online", JSON.stringify([{ id: "codex", status: "healthy" }]), now, now)
+      .run("machine_1", "owner_1", "PC", "online", JSON.stringify([{ id: "codex-cli", status: "healthy" }]), now, now)
     sqlite.prepare("INSERT INTO product_plan (id, display_name, is_default, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
       .run("free", "Free", 1, 1, now, now)
     sqlite.prepare("INSERT INTO product_plan_entitlement (plan_id, entitlement_key, value_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
@@ -255,7 +256,7 @@ describe("seedResearcherWriterRoom", () => {
       expect(botUser?.name).toBe(name)
       expect(botUser?.isBot).toBe(true)
       const [binding] = await db.select().from(communityBotBinding).where(eq(communityBotBinding.userId, bot.botId))
-      expect(binding?.runtime).toBe("codex")
+      expect(binding?.runtime).toBe("codex-cli")
       expect(binding?.machineId).toBe("machine_1")
       expect(binding?.instruction).toBe(instruction)
       const [serverMember] = await db.select().from(communityServerMember).where(
