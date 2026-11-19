@@ -28,6 +28,29 @@ Company That Work Like Actual Employees" (Nimble hosted + Alook open-source).
   Push: this file itself was pushed to the fork's main on 2026-11-14
   at Rashad's tap (see "Pushing this file" below).
 
+## Synced 2026-11-18 (upstream catch-up, at Rashad's tap)
+- Upstream was 59 commits ahead (948 files, +35,262/−15,836). Merged
+  via GitHub "Sync fork": `e2059f1` "Merge branch 'alookai:main' into
+  main" (parents `5bcef59` + `685253f`). Fork is now 7 commits ahead
+  of upstream, 0 behind. No conflicts; only `README.md` and
+  `queries-index.ts` overlapped the fork's files, in different hunks.
+  Zero upstream commits touched the Codex adapter files.
+- One upstream break repaired in the same pass: upstream retired the
+  plain `codex` bot backend (`BACKEND_RETIRED`). Seed default moved
+  `codex` → `codex-cli` (`baea59e`), plus the seed test fixture
+  (`model_observation` column added to its hand-rolled DDL — upstream
+  added that column to `community_bot_binding`, and the test failed
+  4/9 without it).
+- Scoped checks here (full `pnpm check` still OOMs in this sandbox,
+  PC-side): seed tests 9/9; `@alook/shared` suite 157 files,
+  1,880 tests, all passed; shared typecheck exit 0; daemon typecheck
+  exit 0 (needed a rebuild of the stale Nov 14 `@alook/agent-driver`
+  `dist/` first — the 2 errors were stale declarations, not code);
+  shared knip exit 0. `pnpm` is not on PATH here; the local
+  `node_modules/.bin` binaries were used instead.
+- Item 2 (sync policy) is still open — this sync was done ad hoc;
+  the standing rule for how often to pull upstream is still undecided.
+
 ## Backlog — saved for later, each needs its own tap
 1. First real use: run the fork locally on a real machine (his PC once back,
    not this sandbox) — `npx @alook/app onboard`, one room, one agent,
