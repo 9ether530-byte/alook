@@ -48,15 +48,20 @@ Company That Work Like Actual Employees" (Nimble hosted + Alook open-source).
   `dist/` first — the 2 errors were stale declarations, not code);
   shared knip exit 0. `pnpm` is not on PATH here; the local
   `node_modules/.bin` binaries were used instead.
-- Item 2 (sync policy) is still open — this sync was done ad hoc;
-  the standing rule for how often to pull upstream is still undecided.
+- Item 2 (sync policy) — DONE 2026-11-20: adopted as `SYNC-POLICY.md`
+  (`6428d866`, at Rashad's tap) — weekly upstream check, merge-not-rebase,
+  re-verify the Codex tighten + seed-room guard after every sync, scoped
+  checks here, `pnpm check` PC-side, record in TASKS.md, deploy stays a
+  separate tap.
 
 ## Backlog — saved for later, each needs its own tap
 1. First real use: run the fork locally on a real machine (his PC once back,
    not this sandbox) — `npx @alook/app onboard`, one room, one agent,
    one real task, and prove a handoff end to end.
-2. Upstream sync policy: decide how often to pull alookai/alook main into
-   this fork, and whether NativeLayer changes live on a branch or on main.
+2. Upstream sync policy — DONE 2026-11-20: adopted as `SYNC-POLICY.md`
+   (`6428d866`). Weekly upstream check, merge-not-rebase; NativeLayer
+   changes live on main (all fork commits to date are on main, and merges
+   preserve them as parents).
 3. First NativeLayer change (scope before building): fork note / branding
    in README, plus a seed room with a Researcher → Writer pair mirroring
    the article's diagram. Keep the Alook name and Apache-2.0 attribution.
